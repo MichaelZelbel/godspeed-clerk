@@ -51,6 +51,17 @@ test("F1: connecting to an existing Paperless writes nothing into it and shows w
   } finally { await pl.close(); }
 });
 
+test("running setup again reuses the token it has and signs in to nothing", async () => {
+  const pl = await startFakePaperless({ tags: [{ id: 1, name: "Inbox", is_inbox_tag: true }] });
+  try {
+    const dir = tmp();
+    const args = ["setup", "--paperless", pl.url, "--user", "alex", "--godspeed", workspace(), "--no-service", "--no-copy", "--state", dir];
+    assert.equal((await cli(args, { env: { ...modelEnv(), PAPERLESS_PASSWORD: "pw" } })).code, 0);
+    assert.equal((await cli(args, { env: { ...modelEnv(), PAPERLESS_PASSWORD: "" } })).code, 0);
+    assert.deepEqual(pl.writes.map((w) => w.path), ["/api/token/"]);
+  } finally { await pl.close(); }
+});
+
 test("connect with a token makes no request that is not a read", async () => {
   const pl = await startFakePaperless({ tags: [{ id: 1, name: "Inbox", is_inbox_tag: true }] });
   try {
@@ -130,6 +141,9 @@ test("the services start godspeed-clerk worker, as the right account", () => {
   assert.match(unit, /ExecStart="\/usr\/bin\/node" "\/usr\/local\/lib\/godspeed-clerk\/bin\/godspeed-clerk\.mjs" "worker" "--state" "\/var\/lib\/godspeed\/clerk"/);
   assert.match(unit, /Restart=always/);
   assert.match(unit, /UMask=0077/);
+  // systemd takes WorkingDirectory as a plain absolute path; a quoted one is a fatal unit error.
+  assert.ok(unit.split("\n").includes("WorkingDirectory=/var/lib/godspeed/clerk"), unit);
+  assert.ok(systemdUnit({ ...p, stateDir: "/srv/my docs/100%" }, { system: true }).split("\n").includes("WorkingDirectory=/srv/my\\x20docs/100%%"));
   assert.match(launchAgentPlist(p), /<string>worker<\/string>/);
   assert.match(windowsTaskXml({ ...p, user: "PC\\alex", conhost: "" }), /worker/);
 });
