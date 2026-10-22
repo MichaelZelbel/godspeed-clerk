@@ -1,0 +1,7 @@
+node_modules/
+*.tmp
+.DS_Store
+# A person's documents, records and keys never belong here: the state folder lives outside the repository.
+state/
+*.env
+test/kit/rendered/
