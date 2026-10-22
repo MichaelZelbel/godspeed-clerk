@@ -20,7 +20,7 @@ export const TEST_CLIENT = { id: "test-client.apps.googleusercontent.com", secre
 
 export async function startFakeDrive({ tree = {}, account = "alex@example.test", pageSize = 100, grantScope = null } = {}) {
   const st = { files: new Map(), writes: [], codes: new Map(), refresh: new Map(), access: new Map(), sessions: new Map(), seq: 1, revoked: false, grantScope };
-  const newId = (p) => `${p}${String(st.seq++).padStart(4, "0")}`;
+  const newId = (p) => `${p}${String(st.seq++).padStart(4, "0")}Xq7LmZ2vR9tWk4pB8nC3yHj`; // as long as Google's ids
   const ROOT = "root0000";
   st.files.set(ROOT, { id: ROOT, name: "My Drive", mimeType: FOLDER, parents: [], trashed: false, appProperties: {} });
   const now = () => new Date().toISOString();

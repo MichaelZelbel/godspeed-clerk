@@ -3,15 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { main } from "../lib/commands/index.mjs";
+import { cli } from "./helpers.mjs";
 import { statePaths } from "../lib/core/paths.mjs";
 import { loadSettings } from "../lib/core/settings.mjs";
-
-export async function cli(args, { env = {} } = {}) {
-  const out = [], err = [];
-  const code = await main(args, { print: (s) => out.push(s), fail: (s) => err.push(s), env: { ...process.env, ...env } });
-  return { code, out: out.join("\n"), err: err.join("\n") };
-}
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "clerk-cli-"));
 
