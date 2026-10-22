@@ -7,6 +7,7 @@ import path from "node:path";
 import { kitWorld, DOCS, text } from "./kit-world.mjs";
 import { writeJson, readJson } from "../lib/core/files.mjs";
 import { statusReport } from "../lib/core/status.mjs";
+import { runOnce } from "../lib/core/run.mjs";
 
 const ALEX = DOCS.filter((d) => d.owner === "alex").map((d) => d.slug);
 
@@ -51,6 +52,23 @@ test("F13: with a batch size of 2 and five documents, 2 are sorted and 3 wait; t
     const third = await w.run();
     assert.equal(third.waiting, 0);
     assert.match(third.progress, /^5 of 5 sorted$/);
+  } finally { await w.close(); }
+});
+
+test("F8: a scan that arrives while a run is sorting gets its first copy in that same run", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "roofing-invoice"] });
+  try {
+    let added = null;
+    const ask = w.context().ask;
+    // The clock jumps past the run's time limit when the scan arrives: the late copy still goes.
+    const r = await runOnce({ ...w.context(), clock: () => (added ? Date.now() + 3600e3 : Date.now()), ask: async (req) => {
+      if (!added) added = w.pl.addDoc({ content: "Fairford Library, 14 April 2025. Your reserved book has arrived, reservation code LIB-LATE.", tags: [1], added: "2026-10-22T16:59:00+02:00" });
+      return ask(req);
+    } });
+    assert.ok(added);
+    assert.equal(r.copied, 3);
+    assert.equal(w.drive.marked(added.id).length, 1);
+    assert.equal(r.sorted + r.check, 1);
   } finally { await w.close(); }
 });
 
