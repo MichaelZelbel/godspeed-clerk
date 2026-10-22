@@ -1,0 +1,35 @@
+name: full
+# The full test (PRD section 11): a real Paperless-ngx 3.3.3 in Docker, the made-up kit uploaded
+# as phone scans, the Clerk against a pretend Google Drive with recorded AI answers.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start Paperless-ngx 3.3.3
+        run: docker compose -f test/full/compose.yaml up -d
+      - name: Render the made-up kit as scans
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 test/kit/render.py test/kit/rendered
+      - name: The full test
+        run: node test/full/full.mjs
+        env:
+          PAPERLESS_URL: http://127.0.0.1:8000
+          KIT_RENDERED: test/kit/rendered
+      - name: What Paperless said, when it failed
+        if: failure()
+        run: docker compose -f test/full/compose.yaml logs --tail 200 webserver
+      - name: Stop Paperless
+        if: always()
+        run: docker compose -f test/full/compose.yaml down -v

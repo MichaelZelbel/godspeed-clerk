@@ -1,0 +1,22 @@
+# The full test's Paperless-ngx: the version the first trial runs (3.3.3), with its broker.
+# SQLite instead of PostgreSQL keeps it small; the API the Clerk uses is the same.
+services:
+  broker:
+    image: docker.io/library/redis:7
+    restart: unless-stopped
+  webserver:
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.3
+    restart: unless-stopped
+    depends_on: [broker]
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      PAPERLESS_REDIS: redis://broker:6379
+      PAPERLESS_ADMIN_USER: alex
+      PAPERLESS_ADMIN_PASSWORD: kit-alex-password
+      PAPERLESS_ADMIN_MAIL: alex@example.test
+      PAPERLESS_SECRET_KEY: kit-only-not-a-secret
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_TIME_ZONE: Europe/Berlin
+      PAPERLESS_URL: http://127.0.0.1:8000
+      PAPERLESS_TASK_WORKERS: "2"
