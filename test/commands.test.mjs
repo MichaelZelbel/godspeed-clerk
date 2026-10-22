@@ -143,7 +143,7 @@ test("the services start godspeed-clerk worker, as the right account", () => {
   assert.match(unit, /UMask=0077/);
   // systemd takes WorkingDirectory as a plain absolute path; a quoted one is a fatal unit error.
   assert.ok(unit.split("\n").includes("WorkingDirectory=/var/lib/godspeed/clerk"), unit);
-  assert.ok(systemdUnit({ ...p, stateDir: "/srv/my docs/100%" }, { system: true }).split("\n").includes("WorkingDirectory=/srv/my\\x20docs/100%%"));
+  assert.ok(systemdUnit({ ...p, stateDir: "/srv/my docs/100%" }, { system: true }).split("\n").includes("WorkingDirectory=/srv/my docs/100%%"));
   assert.match(launchAgentPlist(p), /<string>worker<\/string>/);
   assert.match(windowsTaskXml({ ...p, user: "PC\\alex", conhost: "" }), /worker/);
 });
