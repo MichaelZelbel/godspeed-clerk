@@ -13,6 +13,7 @@ Everything is in one folder, readable by you only (files 600, folders 700): as r
 - `settings.json`: your choices, and the facts from your profile that help sorting (`about`).
 - `paperless.json`, `drive.json`: the two connections. They hold keys; keep them private.
 - `plan.json`: the folder plan.
+- `drive-tree.json`: the names of the folders inside your documents folder, kept between runs.
 - `records/<number>.json`: one per document. Numbers, the mark, folder ids, a hash of the file
   name, times. Never a document's text, never its title.
 - `clerk.log`: one line per step, naming documents by number only.

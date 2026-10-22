@@ -17,6 +17,16 @@ folders you already keep, and could not file into them. So the Clerk asks for th
 Every write goes through one place in the code (`Confined` in `lib/core/drive.mjs`), and the tests
 prove that nothing lands outside.
 
+## Reading the documents folder quickly
+
+The folders inside the documents folder are read level by level, asking Google for the folders
+inside up to 100 folders at once, so a tree of a few thousand folders takes a few dozen calls,
+not one call per folder. Nothing outside the documents folder is asked for. The tree is then
+kept (in `drive-tree.json` in the Clerk's own folder, readable by you only) together with a
+position in Google's list of changes: each later run asks only what changed since, which is one
+call when nothing did. Once a day, and when a folder is moved in from elsewhere with folders of
+its own, the tree is read whole again.
+
 ## Your own Google app
 
 The Clerk signs in with a Google app you own (a "Desktop app" OAuth client), the same way

@@ -18,8 +18,10 @@ const b64url = (b) => Buffer.from(b).toString("base64").replace(/\+/g, "-").repl
 
 export const TEST_CLIENT = { id: "test-client.apps.googleusercontent.com", secret: "test-secret" };
 
-export async function startFakeDrive({ tree = {}, account = "alex@example.test", pageSize = 100, grantScope = null } = {}) {
-  const st = { files: new Map(), writes: [], codes: new Map(), refresh: new Map(), access: new Map(), sessions: new Map(), seq: 1, revoked: false, grantScope };
+export async function startFakeDrive({ tree = {}, account = "alex@example.test", pageSize = 100, grantScope = null, maxOr = Infinity } = {}) {
+  const st = { files: new Map(), writes: [], codes: new Map(), refresh: new Map(), access: new Map(), sessions: new Map(), seq: 1, revoked: false, grantScope, calls: [], changes: [] };
+  // Drive's changes feed: every change to a file, in order; a page token is a position in it.
+  const logChange = (id) => { const x = st.files.get(id); st.changes.push({ fileId: id, removed: false, file: x ? { id: x.id, name: x.name, mimeType: x.mimeType, parents: [...x.parents], trashed: x.trashed } : null }); };
   const newId = (p) => `${p}${String(st.seq++).padStart(4, "0")}Xq7LmZ2vR9tWk4pB8nC3yHj`; // as long as Google's ids
   const ROOT = "root0000";
   st.files.set(ROOT, { id: ROOT, name: "My Drive", mimeType: FOLDER, parents: [], trashed: false, appProperties: {} });
@@ -30,11 +32,13 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
     const buf = Buffer.isBuffer(content) ? content : Buffer.from(String(content));
     st.files.set(id, { id, name, mimeType: extra.mimeType || "application/pdf", parents: [parent], trashed: false, appProperties: extra.appProperties || {},
       content: buf, size: String(buf.length), md5Checksum: md5(buf), sha256Checksum: sha256(buf), modifiedTime: now() });
+    logChange(id);
     return id;
   }
   function addFolder(name, parent) {
     const id = newId("d");
     st.files.set(id, { id, name, mimeType: FOLDER, parents: [parent], trashed: false, appProperties: {}, modifiedTime: now() });
+    logChange(id);
     return id;
   }
   function build(node, parent) {
@@ -54,16 +58,16 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
   const byPath = (p) => [...st.files.values()].find((f) => pathOf(f.id) === p && !f.trashed) || null;
 
   // ---------------------------------------------------------------- the q subset
-  function splitAnd(q) {
+  function splitAnd(q, sep = " and ") {
     const out = [];
     let depth = 0, cur = "", inStr = false;
     for (let i = 0; i < q.length; i++) {
       const c = q[i];
       if (c === "\\" && inStr) { cur += c + q[++i]; continue; }
       if (c === "'") inStr = !inStr;
-      if (!inStr && c === "{") depth++;
-      if (!inStr && c === "}") depth--;
-      if (!inStr && depth === 0 && q.slice(i, i + 5) === " and ") { out.push(cur.trim()); cur = ""; i += 4; continue; }
+      if (!inStr && (c === "{" || c === "(")) depth++;
+      if (!inStr && (c === "}" || c === ")")) depth--;
+      if (!inStr && depth === 0 && q.slice(i, i + sep.length) === sep) { out.push(cur.trim()); cur = ""; i += sep.length - 1; continue; }
       cur += c;
     }
     if (cur.trim()) out.push(cur.trim());
@@ -73,6 +77,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
   const STR = "'(?:[^'\\\\]|\\\\.)*'";
   function clause(c) {
     let m;
+    if (c.startsWith("(") && c.endsWith(")")) { const any = splitAnd(c.slice(1, -1), " or ").map(clause); return (f) => any.some((fn) => fn(f)); }
     if ((m = c.match(new RegExp(`^(${STR}) in parents$`)))) { const id = unq(m[1]) === "root" ? ROOT : unq(m[1]); return (f) => f.parents.includes(id); }
     if ((m = c.match(new RegExp(`^name = (${STR})$`)))) { const v = unq(m[1]); return (f) => f.name === v; }
     if ((m = c.match(new RegExp(`^mimeType (=|!=) (${STR})$`)))) { const v = unq(m[2]); return m[1] === "=" ? (f) => f.mimeType === v : (f) => f.mimeType !== v; }
@@ -108,6 +113,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
       const f = st.files.get(sess.fileId);
       Object.assign(f, { content: buf, size: String(buf.length), md5Checksum: md5(buf), sha256Checksum: sha256(buf), modifiedTime: now() });
       st.writes.push({ op: "update-content", id: f.id, name: f.name, parents: [...f.parents] });
+      logChange(f.id);
       return send(res, 200, shape(f, sess.fields));
     }
     const id = addFile(sess.meta.name, (sess.meta.parents || [ROOT])[0], buf, { appProperties: sess.meta.appProperties || {}, mimeType: sess.meta.mimeType });
@@ -122,6 +128,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
       const raw = Buffer.concat(chunks);
       const u = new URL(req.url, "http://x");
       const p = u.pathname, q = u.searchParams;
+      st.calls.push({ method: req.method, path: p, q: q.get("q") || "" });
       try {
         // ---------------- sign-in
         if (p === "/o/oauth2/v2/auth") {
@@ -172,8 +179,16 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
         }
         if (!p.startsWith("/drive/v3") && !p.startsWith("/upload/drive/v3")) return err(res, 404, "notFound");
         if (!authed(req)) return err(res, 401, "authError", "Invalid Credentials");
+        if (p === "/drive/v3/changes/startPageToken") return send(res, 200, { startPageToken: String(st.changes.length) });
+        if (p === "/drive/v3/changes") {
+          const start = Number(q.get("pageToken")), size = Math.min(Number(q.get("pageSize") || 100), pageSize);
+          if (!Number.isInteger(start) || start < 0 || start > st.changes.length) return err(res, 400, "invalid", "Invalid page token");
+          const slice = st.changes.slice(start, start + size);
+          return send(res, 200, { changes: slice, ...(start + size < st.changes.length ? { nextPageToken: String(start + size) } : { newStartPageToken: String(st.changes.length) }) });
+        }
         if (p === "/drive/v3/about") return send(res, 200, { user: { emailAddress: account, displayName: "Alex Morgan" } });
         if (p === "/drive/v3/files" && req.method === "GET") {
+          if ((q.get("q") || "").split(" or ").length - 1 >= maxOr) return err(res, 400, "invalid", "The query is too complex.");
           const filters = splitAnd(q.get("q") || "").map(clause);
           const all = [...st.files.values()].filter((f) => f.id !== ROOT && filters.every((fn) => fn(f))).sort((a, b) => a.id.localeCompare(b.id));
           const start = Number(q.get("pageToken") || 0), size = Math.min(Number(q.get("pageSize") || 100), pageSize);
@@ -185,6 +200,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
           if (meta.mimeType !== FOLDER) return err(res, 400, "badRequest", "this fake makes folders here; files come by upload");
           const id = addFolder(meta.name, (meta.parents || [ROOT])[0]);
           st.writes.push({ op: "create-folder", id, name: meta.name, parents: [...st.files.get(id).parents] });
+          logChange(id);
           return send(res, 200, shape(st.files.get(id), q.get("fields")));
         }
         let m = p.match(/^\/drive\/v3\/files\/([^/]+)$/);
@@ -201,6 +217,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
             if (q.get("addParents")) f.parents.push(...q.get("addParents").split(",").filter((x) => !f.parents.includes(x)));
             f.modifiedTime = now();
             st.writes.push({ op: "update", id: f.id, name: f.name, parents: [...f.parents], from });
+            logChange(f.id);
             return send(res, 200, shape(f, q.get("fields")));
           }
         }
@@ -228,8 +245,10 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
     idOf: (p) => byPath(p)?.id || null,
     marked: (docId) => [...st.files.values()].filter((f) => f.appProperties?.clerkDoc === String(docId)),
     // what a person does by hand in the Drive
-    userMove: (id, folderPath) => { const f = st.files.get(id); f.parents = [byPath(folderPath).id]; },
-    userRename: (id, name) => { st.files.get(id).name = name; },
+    userMove: (id, folderPath) => { const f = st.files.get(id); f.parents = [byPath(folderPath).id]; logChange(id); },
+    userRename: (id, name) => { st.files.get(id).name = name; logChange(id); },
+    userTrash: (id) => { st.files.get(id).trashed = true; logChange(id); },
+    get calls() { return st.calls; },
     revoke: () => { st.revoked = true; st.access.clear(); st.refresh.clear(); },
     // a token for tests that talk to the drive without signing in
     issue: () => { const r = `r-${crypto.randomBytes(8).toString("hex")}`; st.refresh.set(r, true); st.revoked = false; return r; },
