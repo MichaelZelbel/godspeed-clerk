@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     depends_on: [broker]
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${CLERK_TEST_PORT:-8000}:8000"
     environment:
       PAPERLESS_REDIS: redis://broker:6379
       PAPERLESS_ADMIN_USER: alex
@@ -18,5 +18,10 @@ services:
       PAPERLESS_SECRET_KEY: kit-only-not-a-secret
       PAPERLESS_OCR_LANGUAGE: eng
       PAPERLESS_TIME_ZONE: Europe/Berlin
-      PAPERLESS_URL: http://127.0.0.1:8000
-      PAPERLESS_TASK_WORKERS: "2"
+      PAPERLESS_URL: http://127.0.0.1:${CLERK_TEST_PORT:-8000}
+      PAPERLESS_TASK_WORKERS: "1"
+      PAPERLESS_THREADS_PER_WORKER: "1"
+      PAPERLESS_WEBSERVER_WORKERS: "1"
+    # Small enough to run beside other services on a small server.
+    mem_limit: 2g
+    cpus: 1.5
