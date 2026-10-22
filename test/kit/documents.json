@@ -1,0 +1,18 @@
+{
+  "about": "The kit: one entry per made-up document, in upload order. `upload` is what the phone app would send with it, `presorted` what a person set before the Clerk ran, `style` how the scan looks. Each has an expected-result file in expected/.",
+  "documents": [
+    { "slug": "utility-invoice", "owner": "alex" },
+    { "slug": "roofing-invoice", "owner": "alex" },
+    { "slug": "tax-assessment", "owner": "alex" },
+    { "slug": "insurance-statement", "owner": "alex", "upload": { "title": "Car insurance yearly statement", "tags": ["Car"] } },
+    { "slug": "pay-slip", "owner": "alex" },
+    { "slug": "bank-certificate", "owner": "alex", "presorted": { "title": "Yearly tax certificate 2024", "correspondent": "Harbor Bank", "document_type": "Certificate", "tags": ["Tax 2024"], "created": "2025-02-14" } },
+    { "slug": "council-letter", "owner": "alex" },
+    { "slug": "blurry-scan", "owner": "alex", "style": { "blur": 7, "rotate": 5, "contrast": 0.3 } },
+    { "slug": "injection-letter", "owner": "alex" },
+    { "slug": "parking-permit-a", "owner": "alex" },
+    { "slug": "parking-permit-b", "owner": "alex" },
+    { "slug": "unusable-answer", "owner": "alex" },
+    { "slug": "second-account-letter", "owner": "sam" }
+  ]
+}

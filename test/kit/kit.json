@@ -1,40 +1,103 @@
 {
-  "about": "Everything here is made up. Alex Morgan lives at 12 Elm Row, Fairford FD3 7QL, in a house they own, and works as an engineer at Kestrel Labs Ltd. Nobody of that name or address is meant.",
-  "profile": "Alex Morgan lives at 12 Elm Row, Fairford FD3 7QL (their own house). Employer: Kestrel Labs Ltd. Documents are in English.",
-  "country": "GB",
+  "about": "Everything here is made up. Alex Morgan lives at 12 Elm Row, 40210 Fairford, in a house they own, and works as an engineer at Kestrel Labs. The kit is set in a made-up German town so that the German tax rules apply; the documents are in English. Nobody of that name or address is meant.",
+  "profile": "Alex Morgan lives at 12 Elm Row, 40210 Fairford (their own house). Employer: Kestrel Labs. Documents are in English.",
+  "country": "DE",
   "paperless": {
     "users": [
-      { "username": "alex", "password": "kit-alex-password", "email": "alex@example.test" },
-      { "username": "sam", "password": "kit-sam-password", "email": "sam@example.test" }
+      {
+        "username": "alex",
+        "password": "kit-alex-password",
+        "email": "alex@example.test"
+      },
+      {
+        "username": "sam",
+        "password": "kit-sam-password",
+        "email": "sam@example.test"
+      }
     ],
-    "types": ["Invoice", "Tax assessment", "Insurance", "Pay slip", "Letter", "Certificate", "Contract", "Bank statement", "Receipt"],
+    "types": [
+      "Invoice",
+      "Tax assessment",
+      "Insurance",
+      "Pay slip",
+      "Letter",
+      "Certificate",
+      "Contract",
+      "Bank statement",
+      "Receipt"
+    ],
     "tags": [
-      { "name": "Inbox", "is_inbox_tag": true, "matching_algorithm": 0 },
-      { "name": "Tax 2024", "matching_algorithm": 0 },
-      { "name": "Tax 2025", "matching_algorithm": 0 },
-      { "name": "Home", "matching_algorithm": 0 },
-      { "name": "Car", "matching_algorithm": 0 },
-      { "name": "Important", "matching_algorithm": 0 },
-      { "name": "Not in notebook", "matching_algorithm": 0 }
+      {
+        "name": "Inbox",
+        "is_inbox_tag": true,
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Tax 2024",
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Tax 2025",
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Home",
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Car",
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Important",
+        "matching_algorithm": 0
+      },
+      {
+        "name": "Not in notebook",
+        "matching_algorithm": 0
+      }
     ],
-    "correspondents": ["Brightwater Utilities", "Northgate Insurance", "Kestrel Labs"],
-    "tag_rules": { "Home": "anything about the house at 12 Elm Row (repairs, utilities, council tax, building insurance)", "Car": "anything about the owner's car" }
+    "correspondents": [
+      "Brightwater Utilities",
+      "Northgate Insurance",
+      "Kestrel Labs"
+    ],
+    "tag_rules": {
+      "Home": "anything about the house at 12 Elm Row (repairs, utilities, council tax, building insurance)",
+      "Car": "anything about the owner's car"
+    }
   },
   "drive": {
     "account": "alex@example.test",
     "root": "Paperwork",
     "tree": {
       "Paperwork": {
-        "Invoices": { "Brightwater Utilities": {} },
+        "Invoices": {
+          "Brightwater Utilities": {}
+        },
         "Insurance": {},
-        "Taxes": { "2022": {}, "2023": {} },
-        "Payslips": { "2024": {} },
-        "Letters": { "handwritten note.pdf": "A note Alex put here by hand. The Clerk must never touch it." },
+        "Taxes": {
+          "2022": {},
+          "2023": {}
+        },
+        "Payslips": {
+          "2024": {}
+        },
+        "Letters": {
+          "handwritten note.pdf": "A note Alex put here by hand. The Clerk must never touch it."
+        },
         "Bank": {}
       },
-      "Holiday photos": { "beach.jpg": "Not a document. Outside the documents folder." }
+      "Holiday photos": {
+        "beach.jpg": "Not a document. Outside the documents folder."
+      }
     },
-    "outside": ["Holiday photos"],
-    "placed_by_hand": ["Paperwork/Letters/handwritten note.pdf", "Holiday photos/beach.jpg"]
+    "outside": [
+      "Holiday photos"
+    ],
+    "placed_by_hand": [
+      "Paperwork/Letters/handwritten note.pdf",
+      "Holiday photos/beach.jpg"
+    ]
   }
 }

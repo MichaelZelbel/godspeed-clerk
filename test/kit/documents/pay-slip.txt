@@ -1,0 +1,18 @@
+Kestrel Labs Ltd
+Payroll department, 20 Harbour Lane, 40300 Fairford
+
+Alex Morgan
+Employee number 0417
+
+Pay slip for March 2025
+Date: 31 March 2025
+
+Gross salary                                    4,850.00 EUR
+Income tax                                       -812.40 EUR
+Solidarity surcharge                                -0.00 EUR
+Health insurance                                 -398.10 EUR
+Pension insurance                                -451.05 EUR
+Unemployment insurance                            -63.05 EUR
+Net pay                                          3,125.40 EUR
+
+Paid to your account on 31 March 2025.

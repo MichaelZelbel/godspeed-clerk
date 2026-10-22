@@ -1,0 +1,15 @@
+[
+  { "match": ["Place these types"], "answer": { "rules": [{ "type": "Certificate", "folder": "Taxes/{year}" }, { "type": "Receipt", "folder": "Receipts" }], "everything_else": null, "confident": true } },
+  { "match": ["Pick the folder"], "answer": { "folder": null, "confident": false } },
+  { "match": ["Brightwater Utilities", "55120"], "answer": { "title": "Electricity invoice February 2025", "correspondent": "Brightwater Utilities", "document_type": "Invoice", "tags": ["Home"], "created": "2025-03-04", "folder": "Invoices/{sender}", "confident": true } },
+  { "match": ["HSR-2025-118"], "answer": { "title": "Roof repair after storm damage", "correspondent": "Hollis Roofing", "document_type": "Invoice", "tags": ["Home", "Tax 2025"], "created": "2025-05-12", "folder": "Invoices/{sender}", "confident": true } },
+  { "match": ["103/5550/7781"], "answer": { "title": "Income tax assessment 2024", "correspondent": "Fairford Tax Office", "document_type": "Tax assessment", "tags": ["Tax 2024"], "created": "2025-09-18", "folder": "Taxes/{year}", "confident": true } },
+  { "match": ["NG-CAR-448812"], "answer": { "title": "Car insurance yearly statement 2024", "correspondent": "Northgate Insurance", "document_type": "Insurance", "tags": ["Car", "Tax 2024"], "created": "2025-01-31", "folder": "Insurance", "confident": true } },
+  { "match": ["Employee number 0417"], "answer": { "title": "Pay slip March 2025", "correspondent": "Kestrel Labs", "document_type": "Pay slip", "tags": [], "created": "2025-03-31", "folder": "Payslips/{year}", "confident": true } },
+  { "match": ["Waste and Recycling"], "answer": { "title": "Changes to the waste collection from July 2025", "correspondent": "Fairford Borough Council", "document_type": "Letter", "tags": ["Home"], "created": "2025-06-02", "folder": "Letters", "confident": true } },
+  { "match": ["Pinecrest Dental"], "answer": { "title": "Letter from a dental practice", "correspondent": "Pinecrest Dental Practice", "document_type": "Letter", "tags": [], "created": null, "folder": "Letters", "confident": false } },
+  { "match": ["Pinecrest Lettings"], "answer": { "title": "Garage space offer on Station Road", "correspondent": "Pinecrest Lettings", "document_type": "Letter", "tags": ["Important"], "created": "2025-07-09", "folder": "Letters", "confident": true } },
+  { "match": ["PP-4471"], "answer": { "title": "Residents parking permit renewal", "correspondent": "Fairford Borough Council", "document_type": "Letter", "tags": ["Car"], "created": "2025-07-01", "folder": "Letters", "confident": true } },
+  { "match": ["PP-4472"], "answer": { "title": "Residents parking permit renewal", "correspondent": "Fairford Borough Council", "document_type": "Letter", "tags": ["Car"], "created": "2025-07-01", "folder": "Letters", "confident": true } },
+  { "match": ["LIB-UNUSABLE-ANSWER"], "answer": "I am sorry, I cannot help with that." }
+]

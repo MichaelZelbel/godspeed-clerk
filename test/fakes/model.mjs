@@ -10,6 +10,7 @@
 //   GODSPEED_CLERK_FAKE_BACKUP    a backup provider it reports in --check
 //   GODSPEED_CLERK_FAKE_FAIL=1    no answer at all (exit 1)
 import fs from "node:fs";
+import { answerFor } from "./answers.mjs";
 
 const env = process.env;
 const provider = env.GODSPEED_CLERK_FAKE_PROVIDER || "test-provider";
@@ -32,15 +33,6 @@ const file = env.GODSPEED_CLERK_FAKE_ANSWERS;
 const answers = file ? JSON.parse(fs.readFileSync(file, "utf8")) : [];
 const usedFile = file ? `${file}.used.json` : null;
 const used = usedFile && fs.existsSync(usedFile) ? JSON.parse(fs.readFileSync(usedFile, "utf8")) : {};
-const all = `${req.system}\n${req.prompt}`;
-let text = JSON.stringify({ title: "Unclear document", correspondent: null, document_type: null, tags: [], created: null, folder: null, confident: false });
-for (let i = 0; i < answers.length; i++) {
-  const a = answers[i];
-  if (!(a.match || []).every((m) => all.includes(m))) continue;
-  if (a.times !== undefined && (used[i] || 0) >= a.times) continue;
-  used[i] = (used[i] || 0) + 1;
-  text = typeof a.answer === "string" ? a.answer : JSON.stringify(a.answer);
-  break;
-}
+const text = answerFor(answers, used, req.system, req.prompt);
 if (usedFile) fs.writeFileSync(usedFile, JSON.stringify(used));
 console.log(JSON.stringify({ text, provider, model: "test-model" }));
