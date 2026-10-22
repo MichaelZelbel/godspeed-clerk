@@ -31,7 +31,7 @@ export const KIT_RULES = [
   { type: "Pay slip", folder: "Payslips/{year}" }, { type: "Letter", folder: "Letters" }, { type: "Bank statement", folder: "Bank" }, { type: "Certificate", folder: "Taxes/{year}" },
 ];
 
-export async function kitWorld({ sorting = "godspeed", only = null, settings = {}, answers = ANSWERS, connectDrive = true, confirm = true } = {}) {
+export async function kitWorld({ sorting = "godspeed", only = null, settings = {}, answers = ANSWERS, connectDrive = true, confirm = true, tree = KIT.drive.tree, rules = KIT_RULES, extra = [] } = {}) {
   const k = KIT.paperless;
   const tags = k.tags.map((t, i) => ({ id: i + 1, ...t }));
   const types = k.types.map((name, i) => ({ id: i + 1, name }));
@@ -39,28 +39,29 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
   const tagId = (n) => tags.find((t) => t.name === n).id;
   const docs = [], ids = {};
   let n = 1;
-  for (const d of DOCS) {
-    if (only && !only.includes(d.slug)) continue;
+  for (const d of [...DOCS, ...extra]) {
+    if (only && !only.includes(d.slug) && !extra.includes(d)) continue;
     const id = n++;
     ids[d.slug] = id;
     const scan = `Scan 2026-10-22 16-17-${String(id).padStart(2, "0")}`;
-    const base = { id, content: text(d.slug), title: d.upload?.title || scan, original_file_name: `${scan}.pdf`, tags: [tagId("Inbox"), ...(d.upload?.tags || []).map(tagId)],
+    const base = { id, content: d.content ?? text(d.slug), title: d.upload?.title || scan, original_file_name: `${scan}.pdf`, tags: [tagId("Inbox"), ...(d.upload?.tags || []).map(tagId)],
       created: "2026-10-22", added: `2026-10-22T16:${String(10 + id).padStart(2, "0")}:00+02:00`, owner: d.owner === "sam" ? 3 : 2, size: 4000 + id * 100 };
     if (d.presorted) {
       const p = d.presorted;
+      if (!correspondents.find((c) => c.name === p.correspondent)) correspondents.push({ id: correspondents.length + 1, name: p.correspondent });
       Object.assign(base, { title: p.title, correspondent: correspondents.find((c) => c.name === p.correspondent).id, document_type: types.find((t) => t.name === p.document_type).id, tags: p.tags.map(tagId), created: p.created });
     }
     docs.push(base);
   }
   const pl = await startFakePaperless({ users: [{ id: 2, username: "alex", password: "pw", token: "tok-alex" }, { id: 3, username: "sam", password: "pw2", token: "tok-sam" }], tags, types, correspondents, docs });
-  const drive = await startFakeDrive({ tree: KIT.drive.tree, account: KIT.drive.account });
+  const drive = await startFakeDrive({ tree, account: KIT.drive.account });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-kit-"));
   const paths = statePaths(dir);
   writeJson(paths.paperless, { url: pl.url, user: "alex", token: "tok-alex" });
   saveSettings(paths, { active: true, sorting, about: KIT.profile, country: KIT.country, tag_rules: k.tag_rules, approved_ai: ["test-provider"], settle_minutes: 0, ...settings });
   if (connectDrive) {
     writeJson(paths.drive, { client_id: TEST_CLIENT.id, client_secret: TEST_CLIENT.secret, refresh_token: drive.issue(), account: KIT.drive.account, root: { id: drive.idOf("Paperwork"), name: "Paperwork" } });
-    const plan = { format: 1, status: "proposed", root: { id: drive.idOf("Paperwork"), name: "Paperwork" }, rules: KIT_RULES };
+    const plan = { format: 1, status: "proposed", root: { id: drive.idOf("Paperwork"), name: "Paperwork" }, rules };
     if (confirm) {
       const confined = await new Confined(new Drive({ creds: readJson(paths.drive), env: drive.env }), { rootId: plan.root.id }).load();
       writeJson(paths.plan, await confirmPlan(confined, plan, loadSettings(paths)));

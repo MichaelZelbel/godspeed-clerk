@@ -219,3 +219,55 @@ test("F18: with the records deleted, a run finds every file again and makes none
     assert.deepEqual(w.pl.writes.slice(plBefore), []);
   } finally { await w.close(); }
 });
+
+test("filing in the same run uses the document as sorted: no stray folder, no wasted folder question", async () => {
+  const w = await kitWorld();
+  try {
+    const first = await w.run();
+    assert.ok(first.filed >= 8, `filed ${first.filed} in the first run`);
+    assert.equal(w.prompts.filter((p) => p.prompt.includes("Pick the folder")).length, 0);
+    await w.runUntilQuiet();
+    const made = w.drive.writes.filter((x) => x.op === "create-folder").map((x) => w.drive.pathOf(x.id)).sort();
+    assert.deepEqual(made, ["Paperwork/Invoices/Hollis Roofing", "Paperwork/Payslips/2025", "Paperwork/Taxes/2024"]);
+    assert.equal(w.drive.byPath("Paperwork/Taxes/2026"), null);
+    assert.ok(!w.drive.files().some((f) => /\/\d{4}-\d{2}-\d{2} Scan /.test(w.drive.pathOf(f.id)) && !w.drive.pathOf(f.id).startsWith("Paperwork/To sort/")));
+  } finally { await w.close(); }
+});
+
+test("a document put in Paperless's bin and taken out again is not gone; its file follows its new title", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "pay-slip"] });
+  try {
+    await w.runUntilQuiet();
+    w.pl.bin(w.ids["pay-slip"]);
+    await w.runUntilQuiet();
+    assert.ok(w.record("pay-slip").gone);
+    w.pl.restore(w.ids["pay-slip"]);
+    Object.assign(w.doc("pay-slip"), { title: "Salary March 2025", modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.record("pay-slip").gone, undefined);
+    assert.equal(w.pathOf("pay-slip"), "Paperwork/Payslips/2025/2025-03-31 Salary March 2025.pdf");
+  } finally { await w.close(); }
+});
+
+test("a document briefly missing from the list (another owner for a moment) is not reported deleted", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "pay-slip"] });
+  try {
+    await w.runUntilQuiet();
+    w.doc("pay-slip").owner = 3;
+    await w.run();
+    w.doc("pay-slip").owner = 2;
+    await w.run();
+    assert.equal(w.record("pay-slip").gone, undefined);
+    const notes = fs.existsSync(w.paths.outbox) ? fs.readFileSync(w.paths.outbox, "utf8") : "";
+    assert.doesNotMatch(notes, /deleted-in-paperless/);
+  } finally { await w.close(); }
+});
+
+test("two first copies with the same upload day and title get \" (2)\" in To sort too", async () => {
+  const w = await kitWorld({ only: ["parking-permit-a", "parking-permit-b"] });
+  try {
+    for (const s of ["parking-permit-a", "parking-permit-b"]) w.doc(s).title = "Scan";
+    await w.run({ steps: ["copy"] });
+    assert.deepEqual([w.pathOf("parking-permit-a"), w.pathOf("parking-permit-b")].sort(), ["Paperwork/To sort/2026-10-22 Scan (2).pdf", "Paperwork/To sort/2026-10-22 Scan.pdf"]);
+  } finally { await w.close(); }
+});

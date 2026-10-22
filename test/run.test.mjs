@@ -123,15 +123,17 @@ test("F14: no log line, record or temporary file holds a sentence of a kit docum
     const titles = ALEX.map((slug) => w.doc(slug).title);
     const files = [];
     const walk = (dir) => { for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) { const p = path.join(dir, n); fs.statSync(p).isDirectory() ? walk(p) : files.push(p); } };
-    walk(w.paths.records); walk(w.paths.tmp);
-    files.push(w.paths.log, w.paths.state);
-    for (const f of files) {
+    walk(w.paths.records);
+    files.push(w.paths.log, w.paths.state, w.paths.outbox, w.paths.links);
+    for (const f of files.filter(fs.existsSync)) {
       const body = fs.readFileSync(f, "utf8");
       for (const s of sentences) assert.ok(!body.includes(s), `${path.basename(f)} holds "${s}"`);
       for (const t of titles) assert.ok(!body.includes(t), `${path.basename(f)} holds the title "${t}"`);
     }
     assert.match(fs.readFileSync(w.paths.log, "utf8"), /doc \d+: /);
-    assert.deepEqual(fs.existsSync(w.paths.tmp) ? fs.readdirSync(w.paths.tmp) : [], []);
+    // No temporary file anywhere: the state folder holds the Clerk's own files and nothing else.
+    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records"];
+    for (const n of fs.readdirSync(w.paths.root)) assert.ok(known.includes(n), `unexpected ${n} in the state folder`);
     if (process.platform !== "win32") for (const f of files.filter(fs.existsSync)) assert.equal(fs.statSync(f).mode & 0o777, 0o600, f);
   } finally { await w.close(); }
 });

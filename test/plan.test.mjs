@@ -62,12 +62,20 @@ test("the AI fills the types left open, only with folders that exist", async () 
   } finally { await fake.close(); }
 });
 
+test("a plan that is one sender rule says so plainly, and says how subfolders are used", () => {
+  const s = sentences({ rules: [{ folder: "{sender}" }], to_sort: { name: "Zu sortieren" } });
+  assert.equal(s[0], "Each paper goes into its sender's folder.");
+  assert.match(s.join(" "), /subfolder/);
+  assert.equal(s[s.length - 1], "Anything the Clerk cannot place stays in \"Zu sortieren\".");
+});
+
 test("the plan in plain words", () => {
   const s = sentences({ rules: [{ type: "Invoice", folder: "Invoices/{sender}" }, { tag: "Home", folder: "Home" }, { folder: "{sender}" }], to_sort: { name: "To sort" } });
   assert.deepEqual(s, [
     "\"Invoice\" papers go to Invoices/<sender>.",
     "Papers tagged \"Home\" go to Home.",
     "Everything else goes to <sender>.",
+    "Inside a sender's folder it uses the subfolder that fits, if there is one. It makes a new folder only for a sender that has none yet, or for a missing year where the subfolders are years.",
     "Anything the Clerk cannot place stays in \"To sort\".",
   ]);
 });
@@ -91,7 +99,8 @@ test("placeholders: the year of the one tax tag, else of the date; only placehol
 
 test("fileName cleans and shortens", () => {
   assert.equal(fileName("2025-03-04", "Electricity invoice March 2025"), "2025-03-04 Electricity invoice March 2025.pdf");
-  assert.equal(fileName("2025-03-04", "a/b: c\nd*?"), "2025-03-04 a-b- c d--.pdf");
+  assert.equal(fileName("2025-03-04", "a/b: c\nd*?"), "2025-03-04 a-b - c d--.pdf");
+  assert.equal(fileName("2023-11-01", "Krankenversicherung: Beiträge steuerlich berücksichtigen"), "2023-11-01 Krankenversicherung - Beiträge steuerlich berücksichtigen.pdf");
   const long = fileName("2025-03-04", "x".repeat(400));
   assert.ok(long.length <= 154 && long.endsWith(".pdf"));
   assert.equal(fileName("2025-03-04", "   "), "2025-03-04 Document.pdf");

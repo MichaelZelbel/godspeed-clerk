@@ -262,6 +262,9 @@ async function main() {
     const note = fake.byPath("Paperwork/Letters/handwritten note.pdf");
     check(!!note && fake.writes.every((w) => w.id !== note.id), "F8: the file placed by hand is untouched");
     check(fake.writes.every((w) => w.parents.every((p) => fake.pathOf(p).startsWith("Paperwork"))), "F8: nothing was written outside the documents folder");
+    const madeFolders = fake.writes.filter((w) => w.op === "create-folder").map((w) => fake.pathOf(w.id)).sort();
+    check(JSON.stringify(madeFolders) === JSON.stringify(["Paperwork/Invoices/Hollis Roofing", "Paperwork/Payslips/2025", "Paperwork/Taxes/2024", "Paperwork/To sort"]), `no stray folder: only the new sender, the missing years and To sort were made (${madeFolders.join(", ")})`);
+    check(!fake.files().some((f) => / Scan d{4}-/.test(f.name) && !fake.pathOf(f.id).startsWith("Paperwork/To sort/")), "no file named after its scan outside To sort");
 
     section("F8: changes in Paperless and by hand in the drive");
     await api(alexTok, "PATCH", `documents/${ids["utility-invoice"]}/`, { title: "Electricity bill for February" });
@@ -279,6 +282,13 @@ async function main() {
     await runUntilQuiet(state, env);
     check(fake.pathOf(oneFile(fake, "injection-letter")[0]?.id || "") === inj, "its file stays in the drive");
     check(outbox(state).filter((n) => n.kind === "deleted-in-paperless" && n.doc === ids["injection-letter"]).length === 1, "and the person will hear it once");
+    const record = (slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8"));
+    check(!!record("injection-letter").gone, "its record says it is gone (Paperless answers 404 for a document in its bin)");
+    await api(alexTok, "POST", "trash/", { action: "restore", documents: [ids["injection-letter"]] });
+    await api(alexTok, "PATCH", `documents/${ids["injection-letter"]}/`, { title: "Garage space on Station Road" });
+    await runUntilQuiet(state, env);
+    check(!record("injection-letter").gone, "taken out of Paperless's bin, it is not gone any more");
+    check(oneFile(fake, "injection-letter").length === 1 && fake.pathOf(oneFile(fake, "injection-letter")[0].id) === "Paperwork/Letters/2025-07-09 Garage space on Station Road.pdf", "and its one file follows its new title");
 
     section("F8: Google access withdrawn, then back");
     fake.revoke();
@@ -310,8 +320,11 @@ async function main() {
     const titles = (await all(alexTok, "documents/?fields=title")).map((d) => d.title).filter((t) => t.split(/\s+/).length >= 2);
     const files = [];
     const walk = (dir) => { for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) { const f = path.join(dir, n); fs.statSync(f).isDirectory() ? walk(f) : files.push(f); } };
-    walk(path.join(state, "records")); walk(path.join(state, "tmp"));
-    files.push(...["clerk.log", "state.json", "outbox.jsonl"].map((n) => path.join(state, n)).filter(fs.existsSync));
+    walk(path.join(state, "records"));
+    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records"];
+    const strays = fs.readdirSync(state).filter((n) => !known.includes(n));
+    check(strays.length === 0, `no temporary file: the state folder holds only the Clerk's own files${strays.length ? ` (${strays.join(", ")})` : ""}`);
+    files.push(...["clerk.log", "state.json", "outbox.jsonl", "links.json"].map((n) => path.join(state, n)).filter(fs.existsSync));
     const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)); });
     check(leaks.length === 0, `no log line, record or temporary file holds a sentence or a title${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");

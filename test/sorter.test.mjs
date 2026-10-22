@@ -234,12 +234,42 @@ test("long text keeps its head and its tail", () => {
   assert.ok(c.endsWith("TAIL"));
 });
 
-test("names: the same sender under a longer or shorter name, never a guess between two", () => {
+test("names: the same sender with or without its legal form; a longer, more specific name is another sender", () => {
   const list = [{ id: 1, name: "Northgate Insurance" }, { id: 2, name: "Fairford Borough Council" }, { id: 3, name: "Fairford Water" }];
   assert.equal(findSame(list, "Northgate Insurance Ltd").id, 1);
   assert.equal(findSame(list, "northgate insurance").id, 1);
-  assert.equal(findSame(list, "Fairford Borough Council Parking Office").id, 2);
+  assert.equal(findSame(list, "Fairford Borough Council Parking Office"), null); // a more specific office is not silently merged
   assert.equal(findSame(list, "Fairford"), null);
   assert.equal(findSame(list, "Stadtwerke"), null);
   assert.deepEqual([...nameWords("Hollis & Sons Roofing Ltd")].sort(), ["hollis", "roofing", "sons"]);
+});
+
+test("F6: what a person changes while the AI thinks is kept; the write uses the document as it is then", async () => {
+  const env = await setup();
+  try {
+    const ask = async () => {
+      // The person edits the document in the phone app while the request is out.
+      Object.assign(env.fake.doc(10), { title: "My own title", tags: [1, 5], correspondent: 2, modified: new Date().toISOString() });
+      return { text: answer({ tags: ["Home"] }), provider: "p" };
+    };
+    const r = await sortDocument({ doc: env.doc, tax: env.tax, writer: env.pl.writer("godspeed"), read: () => env.pl.document(10), settings, ask, today: TODAY, folderChoices: [] });
+    const d = env.fake.doc(10);
+    assert.equal(r.result, "sorted");
+    assert.equal(d.title, "My own title");
+    assert.equal(d.correspondent, 2);
+    assert.deepEqual(tagNames(env, d.tags), ["Car", "Home"]);
+  } finally { await env.fake.close(); }
+});
+
+test("F6: a document someone sorted while the AI thought is not written at all", async () => {
+  const env = await setup();
+  try {
+    const ask = async () => {
+      Object.assign(env.fake.doc(10), { tags: [5], modified: new Date().toISOString() });
+      return { text: answer(), provider: "p" };
+    };
+    const r = await sortDocument({ doc: env.doc, tax: env.tax, writer: env.pl.writer("godspeed"), read: () => env.pl.document(10), settings, ask, today: TODAY, folderChoices: [] });
+    assert.equal(r.result, "taken");
+    assert.deepEqual(env.fake.writes, []);
+  } finally { await env.fake.close(); }
 });

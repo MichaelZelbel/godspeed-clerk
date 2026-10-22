@@ -54,3 +54,28 @@ end in `{sender}`, `{year}` or `{type}`; only those parts are ever made. `{year}
 the document's one tax-year tag, otherwise of its date. With no rule for a document, the AI picks
 one of the plan's folders from its title, sender, type, tags and date; not sure, it stays in "To
 sort".
+
+## Sender folders
+
+Many people keep one folder per sender, some with subfolders by topic or year. Those folder names
+are the person's own list of senders, so a plan rule with `{sender}` is not filled in by name
+alone (`lib/core/senders.mjs`):
+
+1. While sorting, the AI sees a shortlist of the existing sender folders whose names look like the
+   document (at most 25, never the whole drive), each with its subfolders two levels deep, a folder
+   of years written once as `<year>`. It answers with exactly one of those paths, `NEW` when it is
+   sure the sender has none, or nothing when it is not sure. A new sender in Paperless then takes
+   the name of the folder it chose.
+2. Filing uses that choice; otherwise the folder this Paperless sender was filed into before; otherwise
+   a folder with the same name (singular or plural, legal form, case and umlauts aside); otherwise
+   the AI picks from a shortlist again. Inside a known sender folder the AI picks among its own
+   subfolders.
+3. A folder is made only for a sender the AI is sure has none, and for a missing year among folders
+   that are years. Unsure, or a choice that was not offered, means "To sort" and nothing made.
+
+A name with a word the other lacks is never taken as the same sender in code ("Finanzamt
+Wendmark-Nord" is not "Finanzamt Wendmark"); the AI decides those from the real names.
+
+A document whose title is still a scan's or a file's name has not been sorted by anyone: it stays in
+"To sort", and no folder is made for it. Filing in a run uses the documents as they are after that
+run's sorting.

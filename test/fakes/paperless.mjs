@@ -18,7 +18,7 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
   const st = {
     users,
     tags: new Map(), correspondents: new Map(), types: new Map(), docs: new Map(),
-    writes: [], requests: [], next: { tag: 1, corr: 1, type: 1, doc: 1 },
+    writes: [], requests: [], next: { tag: 1, corr: 1, type: 1, doc: 1 }, binned: new Set(),
   };
   for (const t of tags) { const id = t.id ?? st.next.tag; st.next.tag = Math.max(st.next.tag, id + 1); st.tags.set(id, { matching_algorithm: 1, match: "", is_inbox_tag: false, owner: 2, ...t, id }); }
   for (const c of correspondents) { const id = c.id ?? st.next.corr; st.next.corr = Math.max(st.next.corr, id + 1); st.correspondents.set(id, { matching_algorithm: 1, match: "", owner: 2, ...c, id }); }
@@ -100,6 +100,7 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
         let items = [...st.docs.values()].map((x) => x.doc);
         const all = q.get("tags__id__all");
         if (all) items = items.filter((d) => all.split(",").map(Number).every((t) => d.tags.includes(t)));
+        items = items.filter((d) => !st.binned.has(d.id));
         if (q.get("owner__id")) items = items.filter((d) => d.owner === Number(q.get("owner__id")));
         if (q.get("owner__id__in")) { const ids = q.get("owner__id__in").split(",").map(Number); items = items.filter((d) => ids.includes(d.owner)); }
         if (q.get("owner__isnull") === "true" || q.get("owner__isnull") === "1") items = items.filter((d) => d.owner === null);
@@ -110,7 +111,7 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
       }
       const m = p.match(/^\/api\/documents\/(\d+)\/(metadata\/|download\/)?$/);
       if (m) {
-        const e = st.docs.get(Number(m[1]));
+        const e = st.binned.has(Number(m[1])) ? null : st.docs.get(Number(m[1]));
         if (!e) return send(res, 404, { detail: "No Document matches the given query." });
         if (!m[2] && req.method === "GET") return send(res, 200, e.doc);
         if (!m[2] && req.method === "PATCH") {
@@ -133,6 +134,9 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
     get writes() { return st.writes; },
     doc: (id) => st.docs.get(id)?.doc,
     remove: (id) => st.docs.delete(id),
+    // Paperless's bin: gone from lists and reads, back on restore.
+    bin: (id) => st.binned.add(id),
+    restore: (id) => { st.binned.delete(id); st.docs.get(id).doc.modified = now(); },
     snapshot: () => JSON.stringify({ docs: [...st.docs.values()].map((x) => ({ ...x.doc, modified: undefined })), tags: [...st.tags.values()], corr: [...st.correspondents.values()], types: [...st.types.values()] }),
     close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }),
   };
