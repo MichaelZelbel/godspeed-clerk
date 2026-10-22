@@ -170,3 +170,29 @@ test("without a confirmed plan nothing goes to the drive, and sorting goes on", 
     assert.match(r.notes.join(" "), /folder plan is not confirmed/);
   } finally { await w.close(); }
 });
+
+for (const sorting of ["godspeed", "paperless", "nobody"]) {
+  test(`sorted by someone else without a title (${sorting}): filed by its type and sender, named <date> <type> <sender>`, async () => {
+    const w = await kitWorld({ sorting, only: ["pay-slip"] });
+    try {
+      const d = w.doc("pay-slip");
+      const type = [...w.pl.state.types.values()].find((t) => t.name === "Pay slip").id;
+      const sender = [...w.pl.state.correspondents.values()].find((c) => c.name === "Kestrel Labs").id;
+      Object.assign(d, { document_type: type, correspondent: sender, created: "2025-03-31", tags: sorting === "godspeed" ? [] : d.tags, modified: new Date().toISOString() });
+      await w.runUntilQuiet();
+      assert.equal(w.pathOf("pay-slip"), "Paperwork/Payslips/2025/2025-03-31 Pay slip Kestrel Labs.pdf");
+      assert.equal(d.title, "Scan 2026-10-22 16-17-01");
+    } finally { await w.close(); }
+  });
+}
+
+test("a year never comes from the upload day: sorted by hand without a date, it waits in To sort and no year folder is made", async () => {
+  const w = await kitWorld({ sorting: "nobody", only: ["tax-assessment"] });
+  try {
+    const type = [...w.pl.state.types.values()].find((t) => t.name === "Tax assessment").id;
+    Object.assign(w.doc("tax-assessment"), { document_type: type, modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("tax-assessment"), /^Paperwork\/To sort\//);
+    assert.equal(w.drive.byPath("Paperwork/Taxes/2026"), null);
+  } finally { await w.close(); }
+});

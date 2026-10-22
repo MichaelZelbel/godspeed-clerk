@@ -12,6 +12,12 @@ export function answerFor(answers, used, system, prompt) {
   for (let i = 0; i < answers.length; i++) {
     const a = answers[i];
     if (!(a.match || []).every((m) => all.includes(squash(m)))) continue;
+    // `offered`: names that must be in the request's list of sender folders, as a real AI would see them.
+    if (a.offered) {
+      const line = String(prompt).match(/Sender folders: (.*)/);
+      const list = line ? JSON.parse(line[1]) : [];
+      if (!a.offered.every((o) => list.includes(o))) continue;
+    }
     if (a.times !== undefined && (used[i] || 0) >= a.times) continue;
     used[i] = (used[i] || 0) + 1;
     return typeof a.answer === "string" ? a.answer : JSON.stringify(a.answer);

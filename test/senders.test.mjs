@@ -3,6 +3,7 @@
 // the AI choosing from a shortlist of the real folder names, never make a look-alike next to it,
 // and use the subfolder a person would use.
 import { test } from "node:test";
+import fs from "node:fs";
 import assert from "node:assert/strict";
 import { kitWorld } from "./kit-world.mjs";
 import { sameName, findSame } from "../lib/core/names.mjs";
@@ -14,6 +15,7 @@ const SENDER_TREE = {
     "Ostwald Insurance": { Car: {}, "Home contents": {} },
     "Wendmark Tax Office": { 2023: {}, 2024: {} },
     "Harbour Savings Bank": { Statements: { 2024: {}, 2025: {} }, "Credit card": {} },
+    VKO: {},
   },
   "Holiday photos": {},
 };
@@ -27,6 +29,7 @@ const DOCS = [
   letter("taxoffice", "Wendmark Tax Office. Income tax assessment 2025, dated 15 September 2025."),
   letter("statement", "Harbour Savings Bank. Account statement for August 2025, dated 31 August 2025."),
   letter("lifecover", "Ostwald Insurance. Your life cover offer, dated 1 July 2025."),
+  letter("vko", "Vereinigte Krankenkasse Ostlicht. Your contribution statement for 2024, dated 20 January 2025."),
 ];
 const answer = (slug, a) => ({ match: [`REFERENCE ${slug.toUpperCase()}`], answer: { document_type: "Letter", tags: [], folder: "{sender}", confident: true, ...a } });
 const ANSWERS = [
@@ -37,6 +40,9 @@ const ANSWERS = [
   answer("taxoffice", { title: "Income tax assessment 2025", correspondent: "Wendmark Tax Office", created: "2025-09-15", sender_folder: "Wendmark Tax Office/<year>" }),
   answer("statement", { title: "Account statement August 2025", correspondent: "Harbour Savings Bank", created: "2025-08-31", sender_folder: "Harbour Savings Bank/Statements/<year>" }),
   answer("lifecover", { title: "Life cover offer", correspondent: "Ostwald Insurance", created: "2025-07-01", sender_folder: "Ostwald Insurance/Life" }),
+  // Picks VKO when VKO is offered; says NEW when it is not, as a real AI did.
+  { match: ["Reference VKO"], offered: ["VKO"], answer: { title: "Contribution statement 2024", correspondent: "Vereinigte Krankenkasse Ostlicht", document_type: "Letter", tags: [], created: "2025-01-20", folder: "{sender}", sender_folder: "VKO", confident: true } },
+  answer("vko", { title: "Contribution statement 2024", correspondent: "Vereinigte Krankenkasse Ostlicht", created: "2025-01-20", sender_folder: "NEW" }),
   { match: ["Pick the folder"], answer: { folder: null, confident: false } },
 ];
 
@@ -81,18 +87,52 @@ test("never a look-alike folder: unsure means To sort; a new sender folder only 
   } finally { await w.close(); }
 });
 
-test("the AI sees the real folder names: a shortlist of similar ones and their subfolders, never the whole drive", async () => {
+const offered = (w, ref) => JSON.parse(w.prompts.find((x) => x.prompt.includes(ref)).prompt.match(/Sender folders: (.*)/)[1]);
+
+test("the AI sees every sender folder's name (up to about a thousand), subfolders of the likely ones, nothing outside", async () => {
   const many = structuredClone(SENDER_TREE);
   for (let i = 0; i < 300; i++) many.Paperwork[`Unrelated Supplier ${i}`] = {};
   const w = await senderWorld({ tree: many });
   try {
     await w.runUntilQuiet();
-    const p = w.prompts.find((x) => x.prompt.includes("Reference CAR")).prompt;
-    const list = JSON.parse(p.match(/Sender folders: (.*)/)[1]);
-    assert.ok(list.includes("Ostwald Insurance/Car") && list.includes("Ostwald Insurance/Home contents"), JSON.stringify(list));
-    assert.ok(!list.some((x) => x.startsWith("Unrelated Supplier")));
-    assert.ok(!p.includes("Holiday photos"));
-    assert.ok(list.length <= 60);
+    const list = offered(w, "Reference CAR");
+    assert.ok(list.includes("Ostwald Insurance/Car") && list.includes("Ostwald Insurance/Home contents"), JSON.stringify(list.slice(-10)));
+    assert.equal(list.filter((x) => x.startsWith("Unrelated Supplier")).length, 300);
+    assert.ok(list.includes("Vossberg Dental") && list.includes("VKO"));
+    assert.ok(!list.includes("Holiday photos"));
+  } finally { await w.close(); }
+});
+
+test("above about a thousand sender folders, a shortlist of the likely ones", async () => {
+  const many = structuredClone(SENDER_TREE);
+  for (let i = 0; i < 1100; i++) many.Paperwork[`Unrelated Supplier ${i}`] = {};
+  const w = await senderWorld({ tree: many });
+  try {
+    await w.runUntilQuiet();
+    const list = offered(w, "Reference CAR");
+    assert.ok(list.includes("Ostwald Insurance/Car"));
+    assert.equal(list.filter((x) => x.startsWith("Unrelated Supplier")).length, 0);
+  } finally { await w.close(); }
+});
+
+test("a folder named by initials is offered: VKO for Vereinigte Krankenkasse Ostlicht, and no look-alike is made", async () => {
+  const w = await senderWorld();
+  try {
+    await w.runUntilQuiet();
+    assert.ok(offered(w, "Reference VKO").includes("VKO"));
+    assert.match(w.pathOf("vko"), /^Paperwork\/VKO\//);
+    assert.equal(w.drive.byPath("Paperwork/Vereinigte Krankenkasse Ostlicht"), null);
+  } finally { await w.close(); }
+});
+
+test("folders with many subfolders never push the right sender off the list", async () => {
+  const crowd = { Paperwork: { "Vossberg Dental": {}, "Fairford Elm Row Residents": {}, "Fairford Elm Row Library": {} }, "Holiday photos": {} };
+  for (let i = 0; i < 30; i++) { crowd.Paperwork["Fairford Elm Row Residents"][`Topic ${i}`] = {}; crowd.Paperwork["Fairford Elm Row Library"][`Shelf ${i}`] = {}; }
+  const w = await senderWorld({ tree: crowd });
+  try {
+    await w.runUntilQuiet();
+    assert.ok(offered(w, "Reference DENTAL").includes("Vossberg Dental"));
+    assert.match(w.pathOf("dental"), /^Paperwork\/Vossberg Dental\//);
   } finally { await w.close(); }
 });
 
@@ -106,5 +146,71 @@ test("when Paperless sorts, a person's sender name finds their folder by plural 
     const pick = w.prompts.find((x) => x.prompt.includes("Home contents cover 2025")).prompt;
     assert.ok(!pick.includes("Vossberg"), "only the matched sender's own subfolders are offered");
     assert.deepEqual(w.pl.writes, []);
+  } finally { await w.close(); }
+});
+
+test("names: an ending makes a different surname; only generic words have a plural", () => {
+  for (const [a, b] of [["Peters", "Petersen"], ["Lang", "Lange"], ["Kühn", "Kühne"], ["Brand", "Brandes"], ["Schult", "Schulte"], ["Behren", "Behrens"],
+    ["Steuerberatung Peters", "Steuerberatung Petersen"], ["Malerbetrieb Lang", "Malerbetrieb Lange"]]) {
+    assert.equal(sameName(a, b), false, `${a} / ${b}`);
+    assert.equal(findSame([{ id: 1, name: a }], b), null, `${a} / ${b}`);
+  }
+  for (const [a, b] of [["Ostwald Versicherungen", "Ostwald Versicherung"], ["Rheinische Kassen", "Rheinische Kasse"], ["Volks Banken", "Volks Bank"], ["Stadtwerke Fairford", "Stadtwerk Fairford"],
+    ["Northgate Insurances", "Northgate Insurance"], ["Kestrel Services", "Kestrel Service"], ["Wendmark Partners", "Wendmark Partner"]]) {
+    assert.equal(sameName(a, b), true, `${a} / ${b}`);
+  }
+});
+
+const UNSURE_ONLY = [{ match: [], answer: { folder: null, confident: false } }];
+const homeDoc = { ...letter("homeletter", "Ostwald Insurance, home contents cover, dated 4 April 2025."), presorted: { title: "Home contents cover 2025", correspondent: "Ostwald Insurances AG", document_type: "Letter", tags: [], created: "2025-04-04" } };
+const homeAnswers = [{ match: ["Pick the folder", "Home contents cover 2025"], answer: { folder: "Ostwald Insurance/Home contents", confident: true } }, ...ANSWERS];
+
+test("a filed document stays put: a tag added by hand asks the AI nothing and moves nothing", async () => {
+  const w = await senderWorld({ sorting: "paperless", extra: [homeDoc], answers: homeAnswers });
+  try {
+    await w.runUntilQuiet();
+    const where = w.pathOf("homeletter");
+    assert.match(where, /Home contents/);
+    w.setAnswers(UNSURE_ONLY);
+    const asked = w.prompts.length;
+    const car = [...w.pl.state.tags.values()].find((t) => t.name === "Car").id;
+    Object.assign(w.doc("homeletter"), { tags: [...w.doc("homeletter").tags, car], modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.prompts.length, asked);
+    assert.equal(w.pathOf("homeletter"), where);
+  } finally { await w.close(); }
+});
+
+test("a new sender moves the file only when its folder is decided with confidence; unsure keeps the place", async () => {
+  const w = await senderWorld({ sorting: "paperless", extra: [homeDoc], answers: homeAnswers });
+  try {
+    await w.runUntilQuiet();
+    const where = w.pathOf("homeletter");
+    const sender = (name) => { const id = w.pl.state.next.corr++; w.pl.state.correspondents.set(id, { id, name, matching_algorithm: 1 }); return id; };
+    // Another sender, and the AI is not sure where it goes: the file stays where it is.
+    w.setAnswers(UNSURE_ONLY);
+    Object.assign(w.doc("homeletter"), { correspondent: sender("Southmoor Mutual"), modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("homeletter"), where);
+    // Another sender again, and now the AI is sure it has no folder yet: the file moves to a new one.
+    w.setAnswers([{ match: ["Pick the folder", "Northwind Insurance"], answer: { folder: "NEW", confident: true } }]);
+    Object.assign(w.doc("homeletter"), { correspondent: sender("Northwind Insurance"), modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("homeletter"), "Paperwork/Northwind Insurance/2025-04-04 Home contents cover 2025.pdf");
+  } finally { await w.close(); }
+});
+
+test("with the records lost, the files' own marks say where they are: no AI question, nothing moved", async () => {
+  const w = await senderWorld();
+  try {
+    await w.runUntilQuiet();
+    const before = Object.fromEntries(DOCS.map((d) => [d.slug, w.pathOf(d.slug)]));
+    w.setAnswers(UNSURE_ONLY);
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    const asked = w.prompts.length, writes = w.drive.writes.length;
+    await w.runUntilQuiet();
+    assert.deepEqual(Object.fromEntries(DOCS.map((d) => [d.slug, w.pathOf(d.slug)])), before);
+    assert.equal(w.prompts.length, asked);
+    assert.equal(w.drive.writes.length, writes);
   } finally { await w.close(); }
 });

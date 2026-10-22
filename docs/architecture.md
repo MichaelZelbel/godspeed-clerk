@@ -61,21 +61,33 @@ Many people keep one folder per sender, some with subfolders by topic or year. T
 are the person's own list of senders, so a plan rule with `{sender}` is not filled in by name
 alone (`lib/core/senders.mjs`):
 
-1. While sorting, the AI sees a shortlist of the existing sender folders whose names look like the
-   document (at most 25, never the whole drive), each with its subfolders two levels deep, a folder
-   of years written once as `<year>`. It answers with exactly one of those paths, `NEW` when it is
-   sure the sender has none, or nothing when it is not sure. A new sender in Paperless then takes
-   the name of the folder it chose.
-2. Filing uses that choice; otherwise the folder this Paperless sender was filed into before; otherwise
-   a folder with the same name (singular or plural, legal form, case and umlauts aside); otherwise
-   the AI picks from a shortlist again. Inside a known sender folder the AI picks among its own
-   subfolders.
+1. While sorting, the AI sees the names of all the sender folders (up to about a thousand; above
+   that the likeliest, by words and by initials such as "VKO"), and for the five likeliest also
+   their subfolders, two levels deep, a folder of years written once as `<year>`. Subfolders are
+   listed after all the names, so they never push a name off the list. Nothing outside the
+   documents folder is offered. The AI answers with exactly one path, `NEW` when it is sure the
+   sender has none, or nothing when it is not sure. A new sender in Paperless then takes the name
+   of the folder it chose.
+2. Filing uses that choice; otherwise the folder this Paperless sender was filed into before;
+   otherwise a folder with the same name; otherwise the AI picks from the names again. Inside a
+   known sender folder the AI picks among its own subfolders.
 3. A folder is made only for a sender the AI is sure has none, and for a missing year among folders
    that are years. Unsure, or a choice that was not offered, means "To sort" and nothing made.
 
-A name with a word the other lacks is never taken as the same sender in code ("Finanzamt
-Wendmark-Nord" is not "Finanzamt Wendmark"); the AI decides those from the real names.
+The same name, in code, means the same words once case, umlauts, legal forms and titles are set
+aside; singular and plural count as the same only for generic words (Versicherung, Kasse, Bank,
+Insurance, Services and the like). "Peters" is not "Petersen" and "Finanzamt Wendmark-Nord" is not
+"Finanzamt Wendmark"; the AI decides those from the real names.
 
-A document whose title is still a scan's or a file's name has not been sorted by anyone: it stays in
-"To sort", and no folder is made for it. Filing in a run uses the documents as they are after that
-run's sorting.
+## When a document is filed, and when it moves
+
+- A document is filed as soon as its folder can be decided from what the plan's rule needs (a
+  type, a sender, a tag, a year), whoever sorted it and whatever its title. A year is never taken
+  from the upload day. Without that it waits in "To sort", and no folder is made.
+- Its file is named `<date> <title>.pdf`; while the title is still a scan's or a file's name,
+  `<date> <type> <sender>.pdf`.
+- A filed document's place is kept. A change to its title renames the file in place; only a change
+  to what its folder depends on (type, sender, the tags the plan names, the year) asks where it
+  goes, and only a sure answer moves it. An unsure answer keeps it where it is.
+- The file itself carries where the Clerk last put it, and whether it was kept in "To sort" to be
+  checked. With the records lost, that is the answer: no question, nothing moved.
