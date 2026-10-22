@@ -183,6 +183,28 @@ test("F18: killed after each step in turn, and once in the middle of an upload: 
   } finally { await w.close(); }
 });
 
+test("F18 and F8: with the records deleted, a file moved or renamed by hand still stays the person's", async () => {
+  const w = await kitWorld({ only: ["council-letter", "pay-slip", "utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    const council = w.fileOf("council-letter")[0];
+    w.drive.userMove(council.id, "Paperwork/Insurance");
+    const slip = w.fileOf("pay-slip")[0];
+    w.drive.userRename(slip.id, "march pay.pdf");
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    const before = w.drive.writes.length;
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("council-letter"), /^Paperwork\/Insurance\//);
+    assert.equal(w.pathOf("pay-slip"), "Paperwork/Payslips/2025/march pay.pdf");
+    assert.deepEqual(w.drive.writes.slice(before), []);
+    assert.ok(w.record("council-letter").user_owned);
+    // And it stays theirs after a change in Paperless.
+    Object.assign(w.doc("council-letter"), { title: "New bin collection days", modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("council-letter"), /^Paperwork\/Insurance\/2025-06-02 Changes to the waste collection/);
+  } finally { await w.close(); }
+});
+
 test("F18: with the records deleted, a run finds every file again and makes none twice", async () => {
   const w = await kitWorld();
   try {

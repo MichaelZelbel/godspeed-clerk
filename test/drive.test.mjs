@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { startFakeDrive, TEST_CLIENT } from "./fakes/drive.mjs";
-import { Drive, Confined, DriveAccessLost, OutsideError } from "../lib/core/drive.mjs";
+import { Drive, Confined, DriveAccessLost, OutsideError, placeHash, isPlacedByClerk } from "../lib/core/drive.mjs";
 
 const TREE = {
   Paperwork: { Invoices: { "Brightwater Utilities": {} }, Taxes: { 2023: {} }, Letters: { "handwritten note.pdf": "a note" } },
@@ -29,7 +29,8 @@ test("an upload in three pieces arrives whole, with its size and checksums", asy
     assert.equal(f.md5Checksum, crypto.createHash("md5").update(bytes).digest("hex"));
     assert.equal(f.sha256Checksum, crypto.createHash("sha256").update(bytes).digest("hex"));
     assert.equal(fake.pathOf(f.id), "Paperwork/Letters/2026-10-22 Scan.pdf");
-    assert.deepEqual(f.appProperties, mark);
+    assert.deepEqual(f.appProperties, { ...mark, clerkPlace: placeHash(fake.idOf("Paperwork/Letters"), "2026-10-22 Scan.pdf") });
+    assert.equal(isPlacedByClerk(f), true);
   } finally { await fake.close(); }
 });
 
@@ -60,6 +61,9 @@ test("nothing is written outside the documents folder or into a file the Clerk d
     assert.deepEqual(fake.writes.map((w) => w.op), ["upload"]);
     const moved = await confined.moveRename(mine, { name: "2025-03-04 Bill.pdf", parentId: fake.idOf("Paperwork/Invoices") });
     assert.equal(fake.pathOf(moved.id), "Paperwork/Invoices/2025-03-04 Bill.pdf");
+    assert.equal(isPlacedByClerk(moved), true);
+    fake.userRename(moved.id, "my bill.pdf");
+    assert.equal(isPlacedByClerk(await confined.drive.get(moved.id)), false);
   } finally { await fake.close(); }
 });
 

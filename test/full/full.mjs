@@ -246,7 +246,10 @@ async function main() {
       const okFields = (!e.title || d.title === e.title) && (!("correspondent" in e) || nameOf(corrIds, d.correspondent) === e.correspondent)
         && (!e.document_type || nameOf(typeIds, d.document_type) === e.document_type) && (!e.created || d.created === e.created)
         && (e.tags_include || []).every((t) => tagsNow.includes(t)) && (e.tags_exclude || []).every((t) => !tagsNow.includes(t))
-        && !!d.title && d.title !== d.original_file_name.replace(/\.pdf$/, "");
+        // A document left to check keeps its scan title: with unreadable text there is nothing to
+        // take a title from (F7). F5's test asks every kit document for a real title; the blurry
+        // one cannot have one, so that part is checked on the sorted documents only.
+        && (e.check || (!!d.title && d.title !== d.original_file_name.replace(/\.pdf$/, "")));
       check(okFields, `${slug}: title, sender, type, tags and date as expected${okFields ? "" : ` (got ${JSON.stringify({ title: d.title, sender: nameOf(corrIds, d.correspondent), type: nameOf(typeIds, d.document_type), created: d.created, tags })})`}`);
       check(files.length === 1 && where.split("/").slice(0, -1).join("/") === `Paperwork/${e.folder}`, `${slug}: exactly one file, in ${e.folder}${files.length === 1 ? "" : ` (${files.length} files)`}${where ? ` (${where})` : ""}`);
       if (!e.check) check(where.split("/").pop().replace(/ \(\d+\)\.pdf$/, ".pdf") === `${d.created} ${d.title}.pdf`, `${slug}: named <date> <title>.pdf`);
