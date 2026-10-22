@@ -22,8 +22,9 @@ test("the Clerk never deletes and never asks for a new token, even when writing 
   try {
     const pl = new Paperless({ url: fake.url, token: "tok-alex" });
     const w = pl.writer("godspeed");
-    await assert.rejects(w.raw("DELETE", "documents/5/"), ReadOnlyError);
-    await assert.rejects(w.raw("POST", "profile/generate_auth_token/"), ReadOnlyError);
+    assert.deepEqual(Object.keys(w).sort(), ["createCorrespondent", "createTag", "patchDocument"]);
+    await assert.rejects(pl.request("DELETE", "documents/5/"), /never deletes/);
+    await assert.rejects(pl.request("POST", "profile/generate_auth_token/"), /new token/);
     assert.deepEqual(fake.writes, []);
     await w.patchDocument(5, { title: "Electricity bill March 2025" });
     assert.equal(fake.doc(5).title, "Electricity bill March 2025");

@@ -121,3 +121,18 @@ test("when Google finds a query too long, the batch gets smaller and the tree st
     assert.equal(c.folders.size, 501);
   } finally { await fake.close(); }
 });
+
+test("the kept tree is written only when a folder changed", async () => {
+  const { fake, open, cachePath } = await setup({ Paperwork: { Letters: {} } });
+  try {
+    await open();
+    const old = new Date("2026-01-01T00:00:00Z");
+    fs.utimesSync(cachePath, old, old);
+    fake.addFile("a file.pdf", fake.idOf("Paperwork/Letters"), "x"); // a change, but not to a folder
+    await open();
+    assert.equal(fs.statSync(cachePath).mtimeMs, old.getTime());
+    fake.addFolder("New", fake.idOf("Paperwork/Letters"));
+    await open();
+    assert.notEqual(fs.statSync(cachePath).mtimeMs, old.getTime());
+  } finally { await fake.close(); }
+});
