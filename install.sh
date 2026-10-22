@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# The Clerk, an add-on for Godspeed Mission Control: the installer for macOS and Linux.
+#
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/install.sh | bash
+#
+# With options for the setup, put them after "bash -s --", for example:
+#
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/install.sh | bash -s -- --godspeed ~/my-mission-control
+#
+# Run it as the account your mission control belongs to; on a server, as root.
+#
+# What it does:
+#   1. Finds Node.js 22 or newer: on the PATH, the Node that Hermes brings (~/.hermes/tools/node-*),
+#      nvm's, Homebrew's, /usr/local/bin or /usr/bin. It installs nothing of its own.
+#   2. Downloads the newest release of the Clerk from GitHub (main, when there is no release yet)
+#      into a temporary folder. GODSPEED_CLERK_REF=<tag or branch> picks another one.
+#   3. Runs the Clerk's setup with your options (--paperless <address> --user <name>). The setup
+#      copies the program to ~/.godspeed/addons/godspeed-clerk (as root on Linux:
+#      /usr/local/lib/godspeed-clerk), adds the godspeed-clerk command to ~/.godspeed/bin (as root:
+#      /usr/local/bin), makes the private folder ~/.godspeed/clerk (as root: /var/lib/godspeed/clerk),
+#      connects to your Paperless (reading only, nothing in it changes), names the AI that will read
+#      your documents, and starts the worker: a LaunchAgent on macOS, a systemd user service on a
+#      Linux desktop, a systemd service on a server. The Clerk starts paused.
+#   4. Deletes the temporary folder.
+#
+# What it asks: your Paperless password, once, to read the account's existing token (the password
+# is not kept). PAPERLESS_PASSWORD in the environment answers it.
+#
+# What only you do: allow Google Drive access on Google's page, and say yes to the folder plan.
+#
+# Safe to run again: it is also the update. Settings, connections and records stay as they are.
+# To take it out: godspeed-clerk uninstall
+#
+# Everything sits inside main(), so bash has read the whole file before anything runs, even under
+# "curl | bash".
+
+main() {
+  set -euo pipefail
+  local repo="MichaelZelbel/godspeed-clerk"
+
+  say() { printf '%s\n' "$*"; }
+  major() { "$1" --version 2>/dev/null | sed -n 's/^v\([0-9][0-9]*\)\..*/\1/p' | head -n 1; }
+
+  # 1. Node.js 22 or newer.
+  local node="" c m
+  for c in "$(command -v node 2>/dev/null || true)" \
+           $(ls -d "$HOME"/.hermes/tools/node-*/bin/node 2>/dev/null | sort -r) \
+           $(ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -r) \
+           /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
+    [ -n "$c" ] && [ -x "$c" ] || continue
+    m="$(major "$c")"
+    if [ -n "$m" ] && [ "$m" -ge 22 ]; then node="$c"; break; fi
+  done
+  if [ -z "$node" ]; then
+    say "The Clerk needs Node.js 22 or newer, and none was found on this computer."
+    say "Install Godspeed Mission Control first (its Hermes brings its own Node), or Node.js LTS from"
+    say "https://nodejs.org (on macOS also: brew install node), then run this line again."
+    exit 1
+  fi
+
+  # 2. The newest release, or main.
+  local ref="${GODSPEED_CLERK_REF:-}"
+  if [ -z "$ref" ]; then
+    # The answer is JSON on one line (or several); take the value of "tag_name" either way.
+    ref="$(curl -fsSL -H 'User-Agent: godspeed-clerk-installer' "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
+      | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+    [ -n "$ref" ] || ref="main"
+  fi
+
+  # A global, so the cleanup at the end still knows it after main() returned.
+  CLERK_TMP="$(mktemp -d "${TMPDIR:-/tmp}/godspeed-clerk-XXXXXX")"
+  trap 'rm -rf "${CLERK_TMP:-}"' EXIT
+  local tmp="$CLERK_TMP"
+  if ! curl -fsSL "https://codeload.github.com/$repo/tar.gz/$ref" | tar -xz -C "$tmp"; then
+    say "Could not download the Clerk ($ref) from GitHub. Check the internet connection and run this line again."
+    exit 1
+  fi
+  local pkg
+  pkg="$(ls -d "$tmp"/godspeed-clerk-* 2>/dev/null | head -n 1)"
+  if [ -z "$pkg" ] || [ ! -f "$pkg/bin/godspeed-clerk.mjs" ]; then
+    say "The download did not hold the Clerk. Run this line again in a few minutes."
+    exit 1
+  fi
+  say "The Clerk ($ref), with Node $("$node" --version) at $node"
+
+  # 3. The setup. Under "curl | bash" the keyboard is not standard input (the script is), so the
+  # setup questions read from the terminal itself when there is one.
+  local code=0
+  if [ -r /dev/tty ] && [ -w /dev/tty ] && ( : < /dev/tty ) 2>/dev/null; then
+    "$node" "$pkg/bin/godspeed-clerk.mjs" setup "$@" < /dev/tty || code=$?
+  else
+    "$node" "$pkg/bin/godspeed-clerk.mjs" setup "$@" < /dev/null || code=$?
+  fi
+  if [ "$code" -ne 0 ]; then
+    say "The setup stopped (exit $code). What it printed above says why; run this line again once that is fixed."
+    exit "$code"
+  fi
+}
+
+main "$@"
