@@ -374,7 +374,7 @@ async function main() {
     section("F8: changes in Paperless and by hand in the drive");
     // The person adds a line of their own to a note, as in the notebook's editor.
     const mine = NB ? (await NB.notes()).find((x) => x.clerk_doc === ids["utility-invoice"]) : null;
-    if (mine) await NB.query({ table: "notes", operation: "update", values: { content: `${mine.content}\nPaid on 25 March, checked against the bank statement.\n` }, filters: [["eq", "id", mine.id]], expected: { [mine.id]: mine._hash } });
+    if (mine) await NB.query({ table: "notes", operation: "update", values: { content: `Keep until 2032.\n\n${mine.content}\nPaid on 25 March, checked against the bank statement.\n` }, filters: [["eq", "id", mine.id]], expected: { [mine.id]: mine._hash } });
     await api(alexTok, "PATCH", `documents/${ids["utility-invoice"]}/`, { title: "Electricity bill for February" });
     const council = oneFile(fake, "council-letter")[0];
     fake.userMove(council.id, "Paperwork/Insurance");
@@ -385,8 +385,9 @@ async function main() {
     check(fake.pathOf(council.id) === `Paperwork/Insurance/${councilName}`, "a file moved by hand stays where it was put after its title changes");
     if (mine) {
       const n = (await NB.notes()).filter((x) => x.clerk_doc === ids["utility-invoice"]);
-      check(n.length === 1 && n[0].id === mine.id && n[0].title === "Electricity bill for February" && /\nPaid on 25 March, checked against the bank statement\.\n?$/.test(n[0].content) && n[0].content.split("Paid on 25 March").length === 2,
-        "F10: renaming a document updates the same note and keeps the line the person added");
+      check(n.length === 1 && n[0].id === mine.id && n[0].title === "Electricity bill for February" && /\nPaid on 25 March, checked against the bank statement\.\n?$/.test(n[0].content) && n[0].content.split("Paid on 25 March").length === 2
+        && n[0].content.startsWith("Keep until 2032.\n\n- **"),
+        "F10: renaming a document updates the same note and keeps the lines the person added, below and above the Clerk's part");
       const it = (await NB.items()).filter((i) => i.source_id === sumOf("utility-invoice"));
       check(it.length === 1 && it[0].data.title === "Electricity bill for February", "F17: renaming a document updates its item");
       const cn = (await NB.notes()).filter((x) => x.clerk_doc === ids["council-letter"]);
