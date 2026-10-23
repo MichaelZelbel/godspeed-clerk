@@ -210,6 +210,7 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
       let items = [...st.docs.values()].map((x) => x.doc).filter((d) => !st.binned.has(d.id));
       for (const r of v.filter_rules) {
         if (r.rule_type === 25) items = items.filter((d) => (r.value === null || r.value === undefined ? d.storage_path === null || d.storage_path === undefined : d.storage_path === Number(r.value)));
+        else if (r.rule_type === 31) items = items.filter((d) => !String(r.value).split(",").map(Number).includes(d.storage_path));
         else throw new Error(`the pretend Paperless does not read rule ${r.rule_type}`);
       }
       return items.map((d) => d.id).sort((a, b) => a - b);

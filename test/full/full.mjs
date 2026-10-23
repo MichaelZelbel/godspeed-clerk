@@ -652,6 +652,24 @@ async function main() {
     check(leaks.length === 0, `no log line, record or temporary file holds a sentence, a title or a note's summary${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");
     if (NB) check(TG.sent.every((m) => linksIn(m).length === 1), "F16: every message carried exactly one link");
+
+    section("F4, F19: switched to \"nobody sorts\" and back");
+    {
+      const page = (await all(alexTok, "saved_views/")).find((v) => v.name === "To sort");
+      const toSortId = (await all(alexTok, "storage_paths/")).find((x) => x.name === "To sort")?.id;
+      const shown = async () => { const u = (await api(alexTok, "GET", "ui_settings/")).settings?.saved_views || {}; return [(u.sidebar_views_visible_ids || []).includes(page?.id), (u.dashboard_views_visible_ids || []).includes(page?.id)]; };
+      const listed = async () => { const v = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id); const q = (v?.filter_rules || []).map((r) => (r.rule_type === 25 ? `storage_path__id=${r.value}` : r.rule_type === 31 ? `storage_path__id__none=${r.value}` : `unknown=${r.rule_type}`)).join("&"); return (await api(alexTok, "GET", `documents/?${q}&fields=id`)).count; };
+      const s3 = await snapshot();
+      await must(state, ["settings", "sorting", "nobody"], env);
+      await runUntilQuiet(state, env);
+      check(await snapshot() === s3, "with \"nobody sorts\", nothing of a document changes");
+      check(JSON.stringify(await shown()) === JSON.stringify([false, false]) && await listed() === 0, "the Clerk's To sort page leaves the sidebar and the dashboard and lists nothing, since it could no longer be exact");
+      await must(state, ["settings", "sorting", "godspeed"], env);
+      await runUntilQuiet(state, env);
+      const v = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id);
+      check(JSON.stringify(await shown()) === JSON.stringify([true, true]) && JSON.stringify(v?.filter_rules.map((r) => [r.rule_type, String(r.value)])) === JSON.stringify([[25, String(toSortId)]]),
+        "with Godspeed sorting again, the page is back: in the sidebar, on the dashboard, storage path is To sort");
+    }
   } finally { await fake.close(); await NB?.stop(); await TG?.close(); }
 
   console.log(`\n${passes} passed, ${failures} failed`);

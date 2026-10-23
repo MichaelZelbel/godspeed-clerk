@@ -223,20 +223,24 @@ written with API 9, which puts `show_in_sidebar` and `show_on_dashboard` into th
 settings. Every run keeps them level: a folder the Clerk makes gets its path, a renamed or moved
 folder's path gets its new name and template. Only the paths and the view the Clerk made are ever
 changed (`mirror.json` says which, by number); nothing is deleted; a path the person deleted is not
-made again; with the records lost, the Clerk's paths are found again by their templates and the
-view by its name and kind (one rule, on the storage path). A view of the person's with that name is
-never changed; the Clerk's page then takes the name "To sort (The Clerk)". The page is made only when
-Godspeed sorts: then the Clerk gives every paper waiting the To sort path, so the page lists exactly
-them. With "Paperless sorts" and "nobody sorts" the Clerk writes no document, so no page could list
-exactly the papers waiting; there the message links to the collection, which does, and the storage
-paths are the only writes, and only with the yes.
+made again, and so is a page the person deleted (the message then links to Paperless's list of the
+papers with Check this); with the records lost, the Clerk's paths are found again by their templates
+and the page by its rule on the Clerk's own To sort path. A path or view of the person's is never
+changed: when one is called "To sort", the Clerk's takes the name "To sort (The Clerk)". The page is
+made only when Godspeed sorts: then the Clerk gives every paper waiting the To sort path, so the page
+lists exactly them. With "Paperless sorts" and "nobody sorts" the Clerk writes no document, so no
+page could list exactly the papers waiting; there the message links to the collection, which does,
+and the storage paths are the only writes, and only with the yes. A page made before such a switch
+leaves the sidebar and the dashboard and lists nothing (storage path is To sort and not To sort)
+until Godspeed sorts again.
 
 When Godspeed sorts, a paper to check gets the To sort path in the same update that sorted it, so it
 is on the page at once, and every paper the Clerk files gets its folder's path (a paper in a
 subfolder, the nearest path above it). A paper waiting, or placed or moved in this run, gets its path
 at once; the papers filed before the yes get theirs `copy_batch` at a time. The record keeps the
 path the Clerk last saw or set (`sp`; at the yes, every paper starts from the path it has then, so
-the person's own Paperless habits from before are never taken as picks): a storage path different
+the person's own Paperless habits from before are never taken as picks; with the records lost, the
+path of where the Clerk put the paper, so a pick made meanwhile still counts): a storage path different
 from it was picked in Paperless, by the person or Paperless's matching, and is followed in every
 setting: the file moves into that
 path's folder, "Check this" comes off (when Godspeed sorts), and the paper's sender is kept for that

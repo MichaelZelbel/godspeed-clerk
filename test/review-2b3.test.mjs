@@ -156,17 +156,32 @@ test("ROUND2 6: a sender folder with a name over 128 characters gets a storage p
   } finally { await w.close(); }
 });
 
-test("a saved view named To sort that an earlier setting made is taken over and levelled, never a second one refused by Paperless", async () => {
+test("the To sort page found again after the Clerk's records of it were lost is levelled, never a second one refused by Paperless", async () => {
   const w = await kitWorld({ only: ["blurry-scan"], settings: yes });
   try {
-    // Made by the Clerk under "Paperless sorts" before (storage path is none), its records since lost.
-    const old = { id: 40, name: "To sort", sort_field: "added", sort_reverse: true, filter_rules: [{ rule_type: 25, value: null }], display_mode: "smallCards", owner: 2 };
-    w.pl.state.savedViews.set(40, old);
-    w.pl.state.next.view = 41;
+    await w.runUntilQuiet();
+    const [made] = [...w.pl.state.savedViews.values()];
+    fs.rmSync(w.paths.mirror, { force: true }); // its records lost (F18)
+    w.pl.state.ui.saved_views.sidebar_views_visible_ids = [];
     await w.runUntilQuiet();
     assert.equal(w.pl.state.savedViews.size, 1, "no second view");
-    assert.deepEqual(w.pl.state.savedViews.get(40).filter_rules, [{ rule_type: 25, value: String(spNamed(w, "To sort").id) }]);
-    assert.deepEqual(w.pl.viewDocs(40), [w.ids["blurry-scan"]]);
+    assert.deepEqual(w.pl.state.savedViews.get(made.id).filter_rules, [{ rule_type: 25, value: String(spNamed(w, "To sort").id) }]);
+    assert.deepEqual(w.pl.viewDocs(made.id), [w.ids["blurry-scan"]]);
+    assert.ok(w.pl.visibleViews().sidebar.includes(made.id), "back in the sidebar");
+  } finally { await w.close(); }
+});
+
+test("a saved view named To sort of the person's (storage path is none) is never changed; the Clerk's page takes another name", async () => {
+  const w = await kitWorld({ only: ["blurry-scan"], settings: yes });
+  try {
+    const theirs = { id: 40, name: "To sort", sort_field: "added", sort_reverse: true, filter_rules: [{ rule_type: 25, value: null }], display_mode: "smallCards", owner: 2 };
+    w.pl.state.savedViews.set(40, { ...theirs });
+    w.pl.state.next.view = 41;
+    await w.runUntilQuiet();
+    assert.deepEqual(w.pl.state.savedViews.get(40), theirs, "untouched");
+    const mine = [...w.pl.state.savedViews.values()].find((v) => v.id !== 40);
+    assert.equal(mine?.name, "To sort (The Clerk)");
+    assert.deepEqual(w.pl.viewDocs(mine.id), [w.ids["blurry-scan"]]);
   } finally { await w.close(); }
 });
 
@@ -182,5 +197,22 @@ test("a saved view of the person's own named To sort is never changed; the Clerk
     assert.ok(mine && mine.name !== "To sort", JSON.stringify(mine));
     assert.deepEqual(w.pl.viewDocs(mine.id), [w.ids["blurry-scan"]]);
     assert.ok(w.messages.at(-1).includes(`/view/${mine.id}`));
+  } finally { await w.close(); }
+});
+
+test("switched to nobody sorting, the Clerk's page leaves the sidebar and the dashboard and lists nothing; with Godspeed sorting again it is back", async () => {
+  const w = await kitWorld({ only: ["blurry-scan", "council-letter"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    const [v] = [...w.pl.state.savedViews.values()];
+    writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "nobody" });
+    await w.runUntilQuiet();
+    assert.deepEqual(w.pl.visibleViews(), { sidebar: [], dashboard: [] });
+    assert.deepEqual(w.pl.viewDocs(v.id), []);
+    writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "godspeed" });
+    await w.runUntilQuiet();
+    assert.deepEqual(w.pl.visibleViews(), { sidebar: [v.id], dashboard: [v.id] });
+    assert.deepEqual(w.pl.viewDocs(v.id), [w.ids["blurry-scan"]]);
+    assert.equal(w.pl.state.savedViews.size, 1);
   } finally { await w.close(); }
 });
