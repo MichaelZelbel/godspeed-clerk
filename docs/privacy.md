@@ -20,6 +20,13 @@ when nothing of yours is in it, otherwise only your own lines stay, under the ti
 out of the notebook". The notebook's history, and the Git repository it syncs to, keep the earlier
 versions; the Clerk never rewrites history.
 
+## Deadlines
+
+A letter's request with a date becomes a deadline in your Godspeed (its `due/` folder, which
+travels the way your mission control folder does): what it asks, in a few words, its day and a
+link to the document in Paperless. For a letter kept out of the notebook, only its title and date
+name the deadline. The Clerk's records keep the days and which request it is, never the words.
+
 ## Messages
 
 A message names the papers it is about by their title and date, and goes only to you: your
@@ -37,8 +44,8 @@ Everything is in one folder, readable by you only (files 600, folders 700): as r
 - `plan.json`: the folder plan.
 - `drive-tree.json`: the names of the folders inside your documents folder, kept between runs.
 - `records/<number>.json`: one per document. Numbers, the mark, folder ids, a hash of the file
-  name, the note's id and hashes, times. Never a document's text, never its title, never its
-  summary.
+  name, the note's id and hashes, times, and a letter's deadline days. Never a document's text,
+  never its title, never its summary, never what a letter asks.
 - `state.json`: the last run, whether Drive and the notebook answer, the collection's id, and
   which things you have already heard about, by number.
 - `clerk.log`: one line per step, naming documents by number only.

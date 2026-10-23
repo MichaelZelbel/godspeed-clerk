@@ -9,10 +9,10 @@ a folder called "To sort". Within the hour it has a real title, its sender, its 
 the date printed on it, and it sits in the folder you would have put it in yourself, named
 `<date> <title>.pdf`.
 
-**Status: version 0.2, the second batch.** It works with a Paperless you already run, and
-Godspeed knows your papers: every document gets a note in your notebook and an item in a
-"Documents" collection, and you hear about what needs you. Installing Paperless for you,
-deadlines from letters and the nightly restore copy come in the next versions. The requirements it is built and tested against are in the Godspeed
+**Status: version 0.3, the third batch.** It works with a Paperless you already run, Godspeed
+knows your papers (every document gets a note in your notebook and an item in a "Documents"
+collection), a letter's deadline becomes a Godspeed deadline, and you hear about what needs you.
+Installing Paperless for you and the nightly restore copy come in the next versions. The requirements it is built and tested against are in the Godspeed
 repository: `docs/proposals/paperless-addon.md`.
 
 ## What it does
@@ -47,7 +47,26 @@ repository: `docs/proposals/paperless-addon.md`.
   added later, the Clerk takes its own text out of the note (the note goes to the notebook's trash
   when nothing of yours is in it, otherwise only your lines stay), but the notebook's history keeps
   the earlier versions.
-- **Tells you only what needs you**: a paper it could not place, Google Drive no longer letting
+- **Turns a letter's deadline into a Godspeed deadline**: "pay by 20 November" becomes a deadline
+  in Godspeed, which reminds you as the day comes, the way it reminds you of any deadline; the
+  Clerk sends no reminders of its own. Each request with a date is its own deadline, named by
+  what it asks, with a link to the document.
+  - A date written in the letter is taken as written. A period ("within one month of this
+    notice") is counted from the day the letter prints. When it runs from a day the letter does
+    not print (the day it reached you), the Clerk counts from the letter's own date, the earliest
+    the day can be, and asks you to check the date. The upload day is never counted from.
+  - A period with no date on the letter to count from: no deadline; the letter is to check and you
+    are asked for its date. Vague wording ("as soon as possible"): no deadline, the request goes
+    into the note's key facts. A day already passed (an old letter from your pile): into the
+    note's key facts, no deadline.
+  - Each deadline is made once, however often the letter is read. Once you change or close one in
+    Godspeed, it is yours: the Clerk never changes it again. When you correct a letter's date in
+    Paperless, a deadline counted from it moves, unless you changed it.
+  - When Godspeed sorts, the letter gets the tag "Important" until the day has passed.
+  - Papers noted by an earlier version get their deadlines read once, a few at a time, without
+    being sorted or filed again.
+- **Tells you only what needs you**: a paper it could not place, a deadline whose date needs a
+  check, a letter with no date to count a period from, Google Drive no longer letting
   it file, a document deleted in Paperless, the notebook silent for hours. One short message per
   run at most, with one link, never twice about the same thing; nothing otherwise. On a server it
   comes through your assistant's own Telegram bot, on a computer as a notification. While a big
@@ -70,7 +89,8 @@ the code: there is no way for it to send a change.
 
 - **Paperless**: only documents your account owns. It signs in with your account's existing token;
   it never asks Paperless for a new one (that would sign your phone app out). It never deletes
-  anything. It may create senders, "Tax <year>" tags and the "Check this" tag, nothing else.
+  anything. It may create senders, "Tax <year>" tags and the "Check this" and "Important" tags,
+  nothing else. "Important" it takes off again only when it put it on and the day has passed.
 - **Google Drive**: Google is asked for access to your whole drive, because that is the only
   permission that can file into folders you already have. The Clerk itself reads and writes only
   inside the documents folder you name (and, from a later version, a folder of its own), renames
@@ -79,8 +99,9 @@ the code: there is no way for it to send a change.
   setup names it and you approve it; if Godspeed later answers with another provider, the Clerk
   sends nothing until you approve that one too.
 - **Your Godspeed notebook**: through its door on this computer only (127.0.0.1:47831), the same
-  way the notebook's own screens write. It writes its notes (folder "Documents") and the
-  collection "Documents", nothing else. A note it changes is written with the version it just
+  way the notebook's own screens write. It writes its notes (folder "Documents"), the
+  collection "Documents" and its own deadlines (through Godspeed's add-on deadlines), nothing
+  else. A note it changes is written with the version it just
   read, so a note you save at that moment is never written over. It never deletes a note; it
   leaves one you deleted or put in the trash where you put it.
 

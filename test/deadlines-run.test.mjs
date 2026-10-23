@@ -319,3 +319,15 @@ test("upgrade: a paper sorted under the batch-2 code gets its deadlines read onc
     assert.equal(w.nb.deadlineRows().length, all, "made once");
   } finally { await w.close(); }
 });
+
+test("status says how many deadlines are in Godspeed, and when Godspeed cannot keep them", async () => {
+  const { statusReport } = await import("../lib/core/status.mjs");
+  const w = await kitWorld({ only: ["tax-office-letter", "water-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    assert.match(statusReport(w.paths, { env: {}, home: w.paths.root }), /Deadlines: 3 made in Godspeed from your letters\./);
+    w.nb.withoutDeadlines = true;
+    await w.run();
+    assert.match(statusReport(w.paths, { env: {}, home: w.paths.root }), /This Godspeed cannot keep them yet/);
+  } finally { await w.close(); }
+});
