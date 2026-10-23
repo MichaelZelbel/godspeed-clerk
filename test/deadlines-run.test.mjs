@@ -663,3 +663,18 @@ test("F16: with more to say than one deadline, each check-the-date sentence link
     assert.ok(/\/view\/\d+$/.test(m.split("\n").at(-1)), "the To sort page's link last");
   } finally { await w.close(); }
 });
+
+test("F16: two deadlines to check: each sentence links to its paper, and no link is said twice", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  const doc = { slug: "second-notice", owner: "alex", content: "Fairford Borough Council. Penalty notice PCN-99001 for Alex Morgan, 12 Elm Row, 40210 Fairford. Fairford, 12 October 2026. You may object within one month after this notice has been delivered to you." };
+  const answer = { match: ["PCN-99001"], answer: { title: "Second penalty notice", correspondent: "Fairford Borough Council", document_type: "Letter", tags: ["Car"], created: "2026-10-12", folder: "Letters", confident: true, summary: "A second penalty notice.", key_facts: ["Notice: PCN-99001"],
+    requests: [{ ask: "Object to the penalty notice PCN-99001 if it is wrong", by: null, within: { amount: 1, unit: "months" }, counted_from: "receipt", from_date: null, vague: false }] } };
+  const w = await kitWorld({ sorting: "nobody", only: ["parking-notice"], extra: [doc], answers: [answer, ...answers] });
+  try {
+    fs.writeFileSync(w.paths.state, JSON.stringify({ started_at: "2026-10-22T00:00:00Z" }));
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 1);
+    const l = w.messages[0].match(/https?:\/\/\S+/g);
+    assert.deepEqual(l.slice().sort(), [`${w.pl.url}/documents/${w.ids["parking-notice"]}/details`, `${w.pl.url}/documents/${w.ids["second-notice"]}/details`].sort(), w.messages[0]);
+  } finally { await w.close(); }
+});
