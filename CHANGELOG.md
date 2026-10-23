@@ -1,5 +1,35 @@
 # Changes
 
+## 0.4.0 (batch 4: the installer, for everyone else)
+
+- The install line installs Paperless on a Godspeed server that has none (F1): a size check first
+  (memory free, disk, Docker), Paperless pinned to a tested version with memory limits, text reading
+  in the person's language and English, its HTTPS address on the server's own name through the Caddy
+  that gives Godspeed's notebook its address, the person's account with a password made for them and
+  the second factor switched on, a starter set of document types and tags in their language, and the
+  nightly restore copy. A Paperless already running here is offered instead of a second one.
+- The phone (F2): `godspeed-clerk phone` gives the app, the address, the login and the second factor in
+  plain words; the first scan that arrives is reported as connected, once.
+- Keeping it running (F3), only on a Paperless the Clerk installed: updates only to tested versions,
+  at night after a whole restore copy, with a copy of the database, the settings and the version
+  first; a version that does not come up healthy is put back whole and told once. Restarted when it
+  stops, a message when that does not help, a warning before the disk is full, its address put back
+  when a Godspeed update took it away. `godspeed-clerk paperless status|update|check|password`.
+- The restore copy and the rebuild (F9): every night the Clerk's own records, and on a Paperless it
+  installed its full export, into the Clerk's own folder "The Clerk" in the drive, only what changed;
+  never a Paperless where another account keeps papers. `godspeed-clerk restore` rebuilds Paperless
+  on a new server from it: the same version first, every document, then the usual update.
+- The To sort page in "Paperless sorts" and "nobody sorts" (F19's last bullet): a saved view of the
+  papers without a storage path yet, in the sidebar and on the dashboard; the message links to it
+  there too, never to the notebook's collection.
+- Fixed: running the install line again (the update) paused a working Clerk; now only the first
+  setup leaves it paused.
+- The systemd service reads extra settings from `service.env` in the state folder.
+- install.sh finds the Node.js Godspeed's own installer keeps in the Godspeed folder, and takes the
+  Clerk from `GODSPEED_CLERK_TARBALL` when given; install.ps1 for Windows; INSTALL-FOR-ASSISTANTS.md.
+- The machine test (test/machine): the install line on fresh Linux servers, a rebuild on another,
+  an update forced to fail, a server too small.
+
 ## 0.3.3 (a dropped deadline leaves the note)
 
 - A deadline the person dropped in Godspeed leaves the letter's note (its "Deadlines" part) and

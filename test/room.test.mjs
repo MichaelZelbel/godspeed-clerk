@@ -62,3 +62,16 @@ test("measure reads this machine without changing it", () => {
   assert.equal(m.docker, null);
   assert.equal(m.arch, process.arch);
 });
+
+test("run with sudo, the Godspeed folder of the person who ran it is found", async () => {
+  const { findMissionControl } = await import("../lib/core/paths.mjs");
+  const homes = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-homes-"));
+  const ws = path.join(homes, "alex", "godspeed");
+  fs.mkdirSync(ws, { recursive: true });
+  fs.writeFileSync(path.join(ws, "AGENTS.md"), "made up\n");
+  const root = path.join(homes, "root");
+  fs.mkdirSync(root);
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-cwd-"));
+  assert.equal(findMissionControl({ cwd: empty, userHome: root, env: {} }), null);
+  assert.equal(findMissionControl({ cwd: empty, userHome: root, env: { SUDO_USER: "alex" }, homeOf: (u) => path.join(homes, u) }), ws);
+});

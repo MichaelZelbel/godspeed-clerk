@@ -10,23 +10,30 @@
 # Run it as the account your mission control belongs to; on a server, as root.
 #
 # What it does:
-#   1. Finds Node.js 22 or newer: on the PATH, the Node that Hermes brings (~/.hermes/tools/node-*),
-#      nvm's, Homebrew's, /usr/local/bin or /usr/bin. It installs nothing of its own.
+#   1. Finds Node.js 22 or newer: on the PATH, the Node Godspeed's own installer put in your
+#      Godspeed folder, the Node that Hermes brings (~/.hermes/tools/node-*), nvm's, Homebrew's,
+#      /usr/local/bin or /usr/bin. It installs nothing of its own.
 #   2. Downloads the newest release of the Clerk from GitHub (main, when there is no release yet)
-#      into a temporary folder. GODSPEED_CLERK_REF=<tag or branch> picks another one.
-#   3. Runs the Clerk's setup with your options (--paperless <address> --user <name>). The setup
-#      copies the program to ~/.godspeed/addons/godspeed-clerk (as root on Linux:
+#      into a temporary folder. GODSPEED_CLERK_REF=<tag or branch> picks another one;
+#      GODSPEED_CLERK_TARBALL=<address or file> takes the Clerk from there instead (a mirror, a test).
+#   3. Runs the Clerk's setup with your options. On a server without Paperless it asks "Install
+#      Paperless now?" (yes by default) and installs it: Paperless in Docker, its HTTPS address on
+#      the server's own name, your login with a second factor, a starter set of document types and
+#      tags in your language, and the nightly restore copy. With --paperless <address> --user <name>
+#      it connects to a Paperless you already run instead, and changes nothing in it.
+#      The setup copies the program to ~/.godspeed/addons/godspeed-clerk (as root on Linux:
 #      /usr/local/lib/godspeed-clerk), adds the godspeed-clerk command to ~/.godspeed/bin (as root:
 #      /usr/local/bin), makes the private folder ~/.godspeed/clerk (as root: /var/lib/godspeed/clerk),
-#      connects to your Paperless (reading only, nothing in it changes), names the AI that will read
-#      your documents, and starts the worker: a LaunchAgent on macOS, a systemd user service on a
-#      Linux desktop, a systemd service on a server. The Clerk starts paused.
+#      names the AI that will read your documents, and starts the worker: a LaunchAgent on macOS, a
+#      systemd user service on a Linux desktop, a systemd service on a server. The Clerk starts paused.
 #   4. Deletes the temporary folder.
 #
-# What it asks: your Paperless password, once, to read the account's existing token (the password
-# is not kept). PAPERLESS_PASSWORD in the environment answers it.
+# What it asks: whether to install Paperless, and the name you want to sign in with. For a
+# Paperless you already run: your password, once, to read the account's existing token (it is not
+# kept); PAPERLESS_PASSWORD in the environment answers it.
 #
-# What only you do: allow Google Drive access on Google's page, and say yes to the folder plan.
+# What only you do: allow Google Drive access on Google's page, say yes to the folder plan, and
+# sign in once on your phone.
 #
 # Safe to run again: it is also the update. Settings, connections and records stay as they are.
 # To take it out: godspeed-clerk uninstall
@@ -42,8 +49,12 @@ main() {
   major() { "$1" --version 2>/dev/null | sed -n 's/^v\([0-9][0-9]*\)\..*/\1/p' | head -n 1; }
 
   # 1. Node.js 22 or newer.
+  # Godspeed's own folder: the one its device file names, else the usual places.
+  local gs="" d
+  if [ -f "$HOME/.godspeed/device.env" ]; then gs="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | head -n 1 | tr -d \"\')"; fi
   local node="" c m
   for c in "$(command -v node 2>/dev/null || true)" \
+           $(for d in "$gs" "$HOME/godspeed" "$HOME/godspeed-v2" /root/godspeed ${SUDO_USER:+"$(getent passwd "$SUDO_USER" | cut -d: -f6)/godspeed"}; do [ -n "$d" ] && ls -d "$d"/.godspeed/integrated-runtime/runtime/node-v*/bin/node 2>/dev/null; done | sort -r) \
            $(ls -d "$HOME"/.hermes/tools/node-*/bin/node 2>/dev/null | sort -r) \
            $(ls -d "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -r) \
            /opt/homebrew/bin/node /usr/local/bin/node /usr/bin/node; do
@@ -58,9 +69,10 @@ main() {
     exit 1
   fi
 
-  # 2. The newest release, or main.
-  local ref="${GODSPEED_CLERK_REF:-}"
-  if [ -z "$ref" ]; then
+  # 2. The newest release, or main (or the tarball GODSPEED_CLERK_TARBALL names).
+  local ref="${GODSPEED_CLERK_REF:-}" tarball="${GODSPEED_CLERK_TARBALL:-}"
+  if [ -n "$tarball" ]; then ref="${ref:-$tarball}"
+  elif [ -z "$ref" ]; then
     # The answer is JSON on one line (or several); take the value of "tag_name" either way.
     ref="$(curl -fsSL -H 'User-Agent: godspeed-clerk-installer' "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
       | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
@@ -71,7 +83,10 @@ main() {
   CLERK_TMP="$(mktemp -d "${TMPDIR:-/tmp}/godspeed-clerk-XXXXXX")"
   trap 'rm -rf "${CLERK_TMP:-}"' EXIT
   local tmp="$CLERK_TMP"
-  if ! curl -fsSL "https://codeload.github.com/$repo/tar.gz/$ref" | tar -xz -C "$tmp"; then
+  local src="https://codeload.github.com/$repo/tar.gz/$ref"
+  if [ -n "$tarball" ]; then src="$tarball"; fi
+  if [ -f "$src" ]; then tar -xzf "$src" -C "$tmp" || { say "Could not unpack $src."; exit 1; }
+  elif ! curl -fsSL "$src" | tar -xz -C "$tmp"; then
     say "Could not download the Clerk ($ref) from GitHub. Check the internet connection and run this line again."
     exit 1
   fi

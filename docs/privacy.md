@@ -53,6 +53,30 @@ Everything is in one folder, readable by you only (files 600, folders 700): as r
   which things you have already heard about, by number.
 - `clerk.log`: one line per step, naming documents by number only.
 - `outbox.jsonl`: what you should hear about (a document to check, lost drive access), by number.
+- `installed.json`: the Paperless the Clerk installed: its folder, version, port and address.
+- `login.json`: that Paperless's login, made at the install: your account name, the password, the
+  second factor's setup key and the recovery codes, so the Clerk can tell you again how to connect
+  your phone. `godspeed-clerk phone --forget` takes all of that out once you have saved it.
+- `restore-index.json`: which file of the restore copy is in your drive, by path and checksum.
+- `service.env`: settings for the background service, if you add any (none by default).
+
+## A Paperless the Clerk installed
+
+It lives in `/opt/godspeed-clerk/paperless`, readable by root only: its secrets (`paperless.env`:
+Paperless's own key and its database password), its database and documents (`data/`), its nightly
+export (`export/`, every document with its text, for the restore copy), and the copies an update
+keeps of the database (`backups/`). Paperless listens on this server only; the outside reaches it
+through its HTTPS address.
+
+## The restore copy
+
+Every night the folder "The Clerk" in your drive gets the Clerk's records (`records/clerk-records.json`:
+its settings, your folder plan, and per document numbers, marks, folder ids and links, never a
+document's text or title), and, on a Paperless the Clerk installed, Paperless's complete export
+(`paperless/`): every document's file, and a manifest with every title, tag, date and the documents'
+text, your account with its password's hash and its second factor. It is a copy of what your
+Paperless holds, in your own drive; anyone who can open your drive can open it. A Paperless where
+another account keeps papers is never exported.
 
 While it works on a document it holds it in memory; nothing is left in a temporary folder. The
 summary an AI gives while sorting is kept in memory only until the document's note is written.

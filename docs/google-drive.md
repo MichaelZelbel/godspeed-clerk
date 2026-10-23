@@ -10,7 +10,8 @@ folders you already keep, and could not file into them. So the Clerk asks for th
 - it reads the folder names inside the documents folder you name, and nothing else of your drive
   (to find that folder by name it asks Google only for a folder of that name at the top of your
   drive; a link to the folder needs no search at all);
-- it writes only inside that folder (and, from a later version, inside a folder of its own);
+- it writes only inside that folder and inside its own folder, "The Clerk" at the top of your
+  drive, which holds the restore copy (F9);
 - it renames or moves only files it made, which carry its mark;
 - it never deletes a file, and never changes a file it did not make.
 

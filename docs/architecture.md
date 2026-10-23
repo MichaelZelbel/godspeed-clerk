@@ -22,10 +22,26 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `mirror.mjs` | Paperless's storage paths that mirror the folder plan, and the "To sort" saved view (F19). |
 | `learn.mjs` | A sender's folder kept from the person's pick, in the plan or as the sender folder's link. |
 | `run.mjs` | One run: the steps over all documents, in batches and within a time limit. |
+| `restore.mjs` | The restore copy in the Clerk's own drive folder, and what a rebuild takes back (F9). |
 | `records.mjs` | One record per document, the log, the outbox. |
 | `../channels/` | Where messages go: the assistant's own Telegram bot, this computer's notifications. |
 | `context.mjs` | What a run needs, read fresh from the state folder. |
 | `status.mjs`, `lock.mjs`, `settings.mjs`, `paths.mjs`, `files.mjs`, `names.mjs` | The rest. |
+
+The Paperless the Clerk installs lives in `lib/install/`:
+
+| File | What it does |
+| --- | --- |
+| `room.mjs` | The size check before anything is installed: memory free (inside a container's limit too), disk, Docker, Compose, the processor, root. |
+| `versions.mjs` | The Paperless versions the Clerk was tested with, pinned to their image digests. |
+| `stack.mjs` | compose.yaml and paperless.env: Paperless, Postgres and Valkey with memory limits, its port on 127.0.0.1 only, text reading in the person's language and English. |
+| `starter.mjs` | The starter document types and tags in six languages. |
+| `https.mjs` | Paperless's HTTPS address through the Caddy that gives Godspeed's notebook its address. |
+| `totp.mjs` | The second factor's codes (RFC 6238). |
+| `host.mjs` | The installed Paperless: account, token, second factor, starter set, export, import, an update with its rollback. |
+| `install.mjs` | The install path of `setup` (F1), and the phone's words (F2). |
+| `keep.mjs` | Keeping it running (every worker loop), the nightly copy and update (F3). |
+| `rebuild.mjs` | Rebuilding Paperless from the restore copy (F9). |
 
 ## One run
 
@@ -57,7 +73,9 @@ file each, found by the registry). The work lives in `lib/core/`:
    link. While a pile still waits to be sorted, they are held (at most a day) so they come together.
 
 The worker does one run every `interval_minutes` (3), and a run starts no new document after
-`run_minutes` (5), so a new scan has its first copy within about ten minutes.
+`run_minutes` (5), so a new scan has its first copy within about ten minutes. Before each run (also
+while paused) it keeps a Paperless the Clerk installed running; after each run (while active) it
+makes the nightly restore copy when it is due, and the update after it.
 
 ## Picking up where it stopped
 
@@ -237,12 +255,16 @@ made again, and so is a page the person deleted (the message then links to Paper
 papers with Check this); with the records lost, the Clerk's paths are found again by their templates
 and the page by its rule on the Clerk's own To sort path. A path or view of the person's is never
 changed: when one is called "To sort", the Clerk's takes the name "To sort (The Clerk)". The page is
-made only when Godspeed sorts: then the Clerk gives every paper waiting the To sort path, so the page
-lists exactly them. With "Paperless sorts" and "nobody sorts" the Clerk writes no document, so no
-page could list exactly the papers waiting; there the message links to the collection, which does,
-and the storage paths are the only writes, and only with the yes. A page made before such a switch
-leaves the sidebar and the dashboard and lists nothing (storage path is To sort and not To sort)
-until Godspeed sorts again.
+made in every sorting setting and follows a change of it. When Godspeed sorts, its rule is
+"storage path is To sort", and the Clerk gives every paper waiting the To sort path, so the page
+lists exactly them. With "Paperless sorts" and "nobody sorts" the Clerk writes no document (F4), so
+the page is "no storage path yet" (`{rule_type: 25, value: null}`, F19's last bullet): the papers
+nobody has given a place in Paperless, which needs no change to any document; the storage paths are
+the only writes there, and only with the yes. The message links to the page in every setting, never
+to the notebook's collection; without the yes, to Paperless's own list with the same filter
+(`/documents?storage_path__isnull=1`). With the records lost, a "no storage path" page is taken as the
+Clerk's only under a name only the Clerk gives ("To sort (The Clerk)"): a plain "To sort" with that
+rule may be the person's own.
 
 When Godspeed sorts, a paper to check gets the To sort path in the same update that sorted it, so it
 is on the page at once, and every paper the Clerk files gets its folder's path (a paper in a
@@ -266,3 +288,56 @@ sender's. Set back to To sort, a paper waits there again.
 The message counts the papers waiting to be sorted (to check, not filed elsewhere): one line with
 the To sort page's link (without the page, Paperless's list of the papers with Check this), said
 once for every wait (keyed by the paper's sorting).
+
+## The Paperless the Clerk installs (F1, F3, F9)
+
+`setup` without `--paperless` on a server with no Paperless installs one (`lib/install/install.mjs`),
+the way it was set up by hand on 22 October 2026, and every step looks for its own result first, so
+running the line again after a stop carries on:
+
+1. The size check (`room.mjs`): 1.5 GB of memory free, inside the container's limit when there is
+   one, 8 GB of disk, Docker with Compose, a 64-bit processor, root. Short: it says what is missing
+   and installs nothing.
+2. The address (`https.mjs`): the Caddy that holds ports 80 and 443 for Godspeed's notebook, either
+   Godspeed's own (`godspeed-https.service`, its Caddyfile in the Godspeed folder) or the server's
+   (`caddy.service`), and the server's name from its sites. The Clerk adds a site file of its own,
+   `<name>:48444` handed to Paperless on 127.0.0.1, and one `import` line, so Paperless shares the
+   name's certificate; a reload the server's Caddy refuses puts both files back. Godspeed's
+   installer writes its own Caddyfile whole, so the worker puts the line back within the hour.
+3. Paperless (`stack.mjs`, `versions.mjs`) in `/opt/godspeed-clerk/paperless`, pinned to the newest
+   tested image digest, with memory limits (1600m, 384m, 128m) and one worker each; its data in
+   folders beside the files; AI off in Paperless.
+4. The account (`host.mjs`), through Paperless's own shell as its own user, the password on standard
+   input: a superuser named as the person wants, a password made for them; its one token for the
+   Clerk; the starter set in their chat language; the second factor switched on by the installer
+   itself (a new secret, the current code, `POST /api/profile/totp/`), which hands back ten recovery
+   codes. The login is kept in `login.json` until `phone --forget`.
+5. The Clerk connects to Paperless on 127.0.0.1 and gives the person the HTTPS address
+   (`paperless_web`).
+
+**Keeping it running** (`keep.mjs`, every worker loop, also paused): Paperless not answering is
+started at once (`docker compose up -d`), then at most every ten minutes; still down after half an
+hour, one message. Hourly: the disk (under 3 GB or 5 percent: one message per low stretch) and the
+address.
+
+**An update** (`host.mjs`, F3) goes only to a tested version, after a whole restore copy: the new
+image is pulled while the old one runs; Paperless stops; the database folder, the search index
+folder, compose.yaml, paperless.env and the version are copied to `backups/before-<version>-<time>`;
+the new version starts and runs its migrations. Healthy within ten minutes means: the API answers as
+the new version, sees as many documents as before, and a document downloads. Otherwise it stops,
+everything copied is put back, the old version starts and is checked the same way, and the person
+hears it once. The last two copies are kept. The worker updates at night; a version that failed is
+not tried again by itself.
+
+**The restore copy** (`restore.mjs`, F9): see its header. The export runs only on a Paperless the
+Clerk installed and only while no other account owns documents there (asked of Paperless's own
+database, the bin included); it is `document_exporter -d -c -nt -p` into the Paperless folder, and
+only files whose checksum changed are uploaded (a file whose size and time match what was uploaded
+is not read again), a few minutes per run, `restore.json` last.
+
+**The rebuild** (`rebuild.mjs`): only into an empty Paperless the Clerk installed. The export comes
+back from the drive file by file, each checked against the checksum the drive keeps, the manifest
+against the one `restore.json` names; Paperless's data folders are emptied and the version that made
+the export starts; `document_importer` brings back every document with its number, the account with
+its password and second factor; the account's token is made (the export has none); the Clerk's
+records of that night come back (settings that belong to this machine stay); then the usual update.

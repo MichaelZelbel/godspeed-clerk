@@ -5,3 +5,6 @@ node_modules/
 state/
 *.env
 test/kit/rendered/
+
+# The machine test's working files (test certificates, the tarball).
+test/machine/.work/

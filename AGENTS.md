@@ -9,7 +9,9 @@ Paperless-ngx and files each one into the right folder of their own cloud drive.
   it pass; say so in the pull request when one looks wrong.
 - How it is built: `docs/architecture.md`. The build plan of each batch: `docs/superpowers/plans/`.
 - Tests: `node --test "test/*.test.mjs"` (fast, no network, no Docker). The full test with a real
-  Paperless in Docker: `test/full/README.md`, run by the `full` workflow.
+  Paperless in Docker: `test/full/README.md`, run by the `full` workflow. The machine test (the
+  install line on fresh Linux servers, a rebuild, a broken update): `test/machine/README.md`. The
+  GitHub workflows are switched off while the account cannot run Actions; run the tests locally.
 
 House rules:
 
