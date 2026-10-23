@@ -245,52 +245,83 @@ for (const sorting of ["paperless", "nobody"]) {
   });
 }
 
-test("a line the person writes above the Clerk's part is never lost: the note is left as it is", async () => {
+test("a line the person writes above the Clerk's part stays where they wrote it, and the note still follows its document", async () => {
   const w = await kitWorld({ only: ["utility-invoice"] });
   try {
     await w.runUntilQuiet();
     const n = w.noteOf("utility-invoice");
-    const mine = `Gardener keeps the side gate key until July.\n\n${n.content}`;
-    w.nb.edit("notes", n.id, { content: mine });
-    change(w, "utility-invoice", { title: "Electricity bill for February" });
+    w.nb.edit("notes", n.id, { content: `Gardener keeps the side gate key until July.\n\n${n.content}\nPaid on 25 March.\n` });
+    change(w, "utility-invoice", { title: "Electricity bill for February", created: "2025-03-05" });
     await w.runUntilQuiet();
-    assert.equal(w.nb.row("notes", n.id).content, mine);
-    assert.match(fs.readFileSync(w.paths.log, "utf8"), /cannot be told apart/);
+    const after = w.nb.row("notes", n.id);
+    assert.equal(after.title, "Electricity bill for February");
+    assert.match(after.content, /^Gardener keeps the side gate key until July\.\n\n- \*\*Sender:\*\* Brightwater Utilities/);
+    assert.ok(after.content.includes("2025-03-05"), "the Clerk's part was renewed");
+    assert.match(after.content, /\n## Your notes\n\nPaid on 25 March\.\n$/);
+    assert.equal(after.content.split("Invoice number: 55120").length, 3, "the full text and the key fact once each, never twice");
   } finally { await w.close(); }
 });
 
-test("F11 with a line above the Clerk's part: nothing of the person's goes to the trash, the Clerk's own fields come out, and the person hears it once", async () => {
+test("F11 with lines above and below the Clerk's part: only the person's lines stay", async () => {
   const w = await kitWorld({ only: ["council-letter"] });
   try {
     await w.runUntilQuiet();
     const n = w.noteOf("council-letter");
-    const mine = `Ask the neighbours about the brown bin.\n\n${n.content}`;
-    w.nb.edit("notes", n.id, { content: mine });
+    w.nb.edit("notes", n.id, { content: `Ask the neighbours about the brown bin.\n\n${n.content}\nThe green bin goes out on Thursday.\n` });
     change(w, "council-letter", { tags: [...w.doc("council-letter").tags, tagId(w, KEEP_OUT)] });
     await w.runUntilQuiet();
     const after = w.nb.row("notes", n.id);
     assert.equal(after.is_trashed, false);
-    assert.equal(after.content, mine, "the text is the person's to clean");
     assert.equal(after.title, "Document kept out of the notebook");
+    assert.equal(after.content.trim(), "Ask the neighbours about the brown bin.\n\nThe green bin goes out on Thursday.");
     assert.equal(after.clerk_summary, null);
-    assert.equal(after.clerk_facts, null);
-    assert.equal(w.messages.length, 1);
-    assert.match(w.messages[0], /please remove it by hand/);
-    await w.run();
-    assert.equal(w.messages.length, 1);
+    assert.equal(w.messages.length, 0, "nothing for the person to do");
   } finally { await w.close(); }
 });
 
-test("a heading \"Your notes\" the person puts at the top: the note is left as it is, the text never twice", async () => {
+test("a heading \"Your notes\" the person puts at the top: their lines stay, the text never twice; kept out, only theirs stay", async () => {
   const w = await kitWorld({ only: ["utility-invoice"] });
   try {
     await w.runUntilQuiet();
     const n = w.noteOf("utility-invoice");
-    const mine = `## Your notes\n\nMy plan for this bill.\n\n${n.content}`;
-    w.nb.edit("notes", n.id, { content: mine });
+    w.nb.edit("notes", n.id, { content: `## Your notes\n\nMy plan for this bill.\n\n${n.content}` });
     change(w, "utility-invoice", { title: "Electricity bill for February" });
     await w.runUntilQuiet();
-    assert.equal(w.nb.row("notes", n.id).content, mine);
+    const mid = w.nb.row("notes", n.id);
+    assert.equal(mid.title, "Electricity bill for February");
+    assert.match(mid.content, /^## Your notes\n\nMy plan for this bill\.\n\n- \*\*Sender:\*\*/);
+    assert.equal(mid.content.split("Total                                            94.04 EUR").length, 2, "the full text once");
+    change(w, "utility-invoice", { tags: [...w.doc("utility-invoice").tags, tagId(w, KEEP_OUT)] });
+    await w.runUntilQuiet();
+    const after = w.nb.row("notes", n.id);
+    assert.equal(after.content.trim(), "## Your notes\n\nMy plan for this bill.");
+    assert.ok(!after.content.includes("55120"));
+  } finally { await w.close(); }
+});
+
+test("a note the person changed inside the Clerk's part: left as it is; kept out, only the Clerk's fields come out and the person hears it once", async () => {
+  const w = await kitWorld({ only: ["council-letter", "utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    for (const slug of ["council-letter", "utility-invoice"]) {
+      const n = w.noteOf(slug);
+      w.nb.edit("notes", n.id, { content: n.content.replace("## Full text", "## The whole letter, as I like it") });
+    }
+    const inv = w.noteOf("utility-invoice");
+    change(w, "utility-invoice", { title: "Electricity bill for February" });
+    change(w, "council-letter", { tags: [...w.doc("council-letter").tags, tagId(w, KEEP_OUT)] });
+    await w.runUntilQuiet();
+    assert.equal(w.nb.row("notes", inv.id).content, inv.content, "the invoice's note is left as it is");
+    assert.match(fs.readFileSync(w.paths.log, "utf8"), /cannot be told apart/);
+    const council = w.noteOf("council-letter");
+    assert.ok(council.content.includes("The whole letter, as I like it"), "the text is left for the person");
+    assert.equal(council.title, "Document kept out of the notebook");
+    assert.equal(council.clerk_summary, null);
+    assert.equal(council.clerk_facts, null);
+    assert.equal(w.messages.length, 1);
+    assert.match(w.messages[0], /please remove it by hand/);
+    await w.run();
+    assert.equal(w.messages.length, 1);
   } finally { await w.close(); }
 });
 
