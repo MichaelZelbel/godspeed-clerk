@@ -14,6 +14,13 @@
     {"slug": "parking-permit-b", "owner": "alex"},
     {"slug": "unusable-answer", "owner": "alex"},
     {"slug": "doctor-letter", "owner": "alex", "upload": {"tags": ["Not in notebook"]}},
+    {"slug": "water-invoice", "owner": "alex"},
+    {"slug": "tax-office-letter", "owner": "alex"},
+    {"slug": "parking-notice", "owner": "alex"},
+    {"slug": "gym-letter", "owner": "alex"},
+    {"slug": "library-reminder", "owner": "alex"},
+    {"slug": "meter-letter", "owner": "alex"},
+    {"slug": "clinic-letter", "owner": "alex", "upload": {"tags": ["Not in notebook"]}},
     {"slug": "second-account-letter", "owner": "sam"}
   ]
 }

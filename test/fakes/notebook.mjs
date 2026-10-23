@@ -148,6 +148,7 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
     get withoutDeadlines() { return fb.withoutDeadlines; }, set withoutDeadlines(v) { fb.withoutDeadlines = !!v; },
     // Every add-on deadline, with all it holds; and what the person does to one in Godspeed.
     deadlineRows: () => [...due.values()].map((d) => ({ ...shown(d), addon: d.addon, done_when: d.done_when, cost: d.cost })),
+    clearDeadlines: () => due.clear(),
     personMoves: (key, day, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).due = day; },
     personRenames: (key, title, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).title = title; },
     personCloses: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "closed"; d.closed_on = "2026-10-23"; },

@@ -8,7 +8,7 @@ import { readJson, writeJson } from "../lib/core/files.mjs";
 const links = (text) => text.match(/https?:\/\/\S+/g) || [];
 const change = (w, slug, fields) => Object.assign(w.doc(slug), fields, { modified: new Date().toISOString() });
 
-test("F16: a run over the kit sends exactly one message, naming the blurry document; a second run with nothing new sends none", async () => {
+test("F16: a run over the kit sends exactly one message, naming the blurry document and the letter whose deadline needs a check; a second run with nothing new sends none", async () => {
   const w = await kitWorld();
   try {
     await w.runUntilQuiet();
@@ -17,6 +17,11 @@ test("F16: a run over the kit sends exactly one message, naming the blurry docum
     assert.ok(m.includes(`"${w.doc("blurry-scan").title}"`), m);
     assert.ok(m.includes(`"${w.doc("unusable-answer").title}"`), "the answer unusable twice is a paper to check too");
     assert.match(m, /waiting in "To sort"/);
+    // F15: the letter whose deadline was counted from a day it does not print, and the one with no
+    // date to count from, in the same message.
+    assert.ok(m.includes(`please check them: "${w.doc("parking-notice").title}"`), m);
+    assert.ok(m.includes(`Set the letter's date in Paperless and the Clerk makes the deadline: "${w.doc("meter-letter").title}"`), m);
+    for (const slug of ["water-invoice", "tax-office-letter", "gym-letter", "library-reminder"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);
     assert.deepEqual(links(m), ["https://notebook.example/collections/documents"]);
     for (const slug of ["utility-invoice", "council-letter", "doctor-letter"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);
     await w.run();
