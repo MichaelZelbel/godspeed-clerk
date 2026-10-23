@@ -65,10 +65,11 @@ alone (`lib/core/senders.mjs`):
    that the likeliest, by words and by initials such as "VKO"), and for the five likeliest also
    their subfolders, two levels deep, a folder of years written once as `<year>`. Subfolders are
    listed after all the names, so they never push a name off the list. Nothing outside the
-   documents folder is offered. The AI answers with exactly one path, `NEW` when it is sure the
+   documents folder is offered, and never "To sort" itself. The AI answers with exactly one path, `NEW` when it is sure the
    sender has none, or nothing when it is not sure. A new sender in Paperless then takes the name
    of the folder it chose.
-2. Filing uses that choice; otherwise the folder this Paperless sender was filed into before;
+2. Filing uses that choice while the document still has the sender it was made for (a sender
+   corrected in Paperless is decided afresh); otherwise the folder this Paperless sender was filed into before;
    otherwise a folder with the same name; otherwise the AI picks from the names again. Inside a
    known sender folder the AI picks among its own subfolders.
 3. A folder is made only for a sender the AI is sure has none, and for a missing year among folders
@@ -83,7 +84,12 @@ Insurance, Services and the like). "Peters" is not "Petersen" and "Finanzamt Wen
 
 - A document is filed as soon as its folder can be decided from what the plan's rule needs (a
   type, a sender, a tag, a year), whoever sorted it and whatever its title. A year is never taken
-  from the upload day. Without that it waits in "To sort", and no folder is made.
+  from the upload day, unless the Clerk's own sorting read that date off the letter (a letter
+  dated the day it was scanned). A rule that fits but needs an unknown year makes the document
+  wait; it does not fall through to a later catch-all.
+- A sorted paper that cannot be placed is a visible "check this": the "Check this" tag when
+  Godspeed sorts, and one notice in every setting. A paper nobody has sorted yet (no type, sender
+  or tag) simply waits in "To sort".
 - Its file is named `<date> <title>.pdf`; while the title is still a scan's or a file's name,
   `<date> <type> <sender>.pdf`.
 - A filed document's place is kept. A change to its title renames the file in place; only a change

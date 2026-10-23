@@ -16,6 +16,7 @@ const SENDER_TREE = {
     "Wendmark Tax Office": { 2023: {}, 2024: {} },
     "Harbour Savings Bank": { Statements: { 2024: {}, 2025: {} }, "Credit card": {} },
     VKO: {},
+    "Kranbrook Sparkasse": {},
   },
   "Holiday photos": {},
 };
@@ -99,7 +100,13 @@ test("the AI sees every sender folder's name (up to about a thousand), subfolder
     assert.ok(list.includes("Ostwald Insurance/Car") && list.includes("Ostwald Insurance/Home contents"), JSON.stringify(list.slice(-10)));
     assert.equal(list.filter((x) => x.startsWith("Unrelated Supplier")).length, 300);
     assert.ok(list.includes("Vossberg Dental") && list.includes("VKO"));
-    assert.ok(!list.includes("Holiday photos"));
+    // Nothing outside the documents folder anywhere in the request, and a bounded request: every
+    // sender folder's name once, plus at most 150 subfolder paths of the likeliest senders.
+    const req = w.prompts.find((x) => x.prompt.includes("Reference CAR"));
+    assert.ok(!`${req.system}\n${req.prompt}`.includes("Holiday photos"));
+    const senderFolders = 307; // the 7 of the sender tree and the 300 unrelated ones
+    assert.ok(list.length <= senderFolders + 150, `${list.length} offered`);
+    assert.ok(req.prompt.length < 40000, `${req.prompt.length} characters`);
   } finally { await w.close(); }
 });
 
@@ -212,5 +219,76 @@ test("with the records lost, the files' own marks say where they are: no AI ques
     assert.deepEqual(Object.fromEntries(DOCS.map((d) => [d.slug, w.pathOf(d.slug)])), before);
     assert.equal(w.prompts.length, asked);
     assert.equal(w.drive.writes.length, writes);
+  } finally { await w.close(); }
+});
+
+const newSender = (w, name) => { const id = w.pl.state.next.corr++; w.pl.state.correspondents.set(id, { id, name, matching_algorithm: 1 }); return id; };
+
+test("a sender corrected in Paperless moves the file to that sender's folder (found by name, no question)", async () => {
+  const w = await senderWorld();
+  try {
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("car"), /^Paperwork\/Ostwald Insurance\/Car\//);
+    Object.assign(w.doc("car"), { correspondent: newSender(w, "Kranbrook Sparkasse"), modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("car"), "Paperwork/Kranbrook Sparkasse/2025-10-12 Car insurance renewal 2026.pdf");
+  } finally { await w.close(); }
+});
+
+test("a sender corrected to a name only the AI can place: a sure answer moves it, an unsure one keeps it, a hand move stays", async () => {
+  const w = await senderWorld();
+  try {
+    await w.runUntilQuiet();
+    const where = w.pathOf("taxoffice");
+    w.setAnswers([{ match: ["Pick the folder", "Kranbrook Savings Bank"], answer: { folder: "Kranbrook Sparkasse", confident: true } }, { match: [], answer: { folder: null, confident: false } }]);
+    Object.assign(w.doc("taxoffice"), { correspondent: newSender(w, "Lindqvist Hedges and Trees"), modified: new Date().toISOString() });
+    Object.assign(w.doc("dental"), { correspondent: newSender(w, "Kranbrook Savings Bank"), modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("dental"), "Paperwork/Kranbrook Sparkasse/2025-03-03 Invoice for a dental check-up.pdf");
+    assert.equal(w.pathOf("taxoffice"), where, "unsure: the filed place is kept");
+    // Moved by hand, then corrected: the person's place wins.
+    const f = w.fileOf("statement")[0];
+    w.drive.userMove(f.id, "Paperwork/Vossberg Dental");
+    Object.assign(w.doc("statement"), { correspondent: newSender(w, "Kranbrook Sparkasse Card Services"), modified: new Date().toISOString() });
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("statement"), /^Paperwork\/Vossberg Dental\//);
+  } finally { await w.close(); }
+});
+
+test("To sort is never offered as a sender folder", async () => {
+  const w = await senderWorld();
+  try {
+    await w.runUntilQuiet();
+    for (const p of w.prompts) {
+      const line = p.prompt.match(/(?:Sender folders|Folder choices): (.*)/g) || [];
+      for (const l of line) assert.ok(!JSON.parse(l.replace(/^[^:]+: /, "")).some((x) => x === "To sort" || x.startsWith("To sort/")), l);
+    }
+    assert.ok(w.prompts.some((p) => /Sender folders: /.test(p.prompt)));
+  } finally { await w.close(); }
+});
+
+test("a letter dated the day it was scanned: the date the AI read gives the year folder", async () => {
+  const doc = letter("sameday", "Wendmark Tax Office. Reminder about your tax return, dated 22 October 2026.");
+  const answers = [answer("sameday", { title: "Reminder about the tax return", correspondent: "Wendmark Tax Office", created: "2026-10-22", sender_folder: "Wendmark Tax Office/<year>" })];
+  const w = await senderWorld({ extra: [doc], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("sameday"), "Paperwork/Wendmark Tax Office/2026/2026-10-22 Reminder about the tax return.pdf");
+  } finally { await w.close(); }
+});
+
+test("when the year really is unknown, the document is a visible check: the Check this tag and a notice", async () => {
+  const doc = letter("nodate", "Wendmark Tax Office. A note without any date on it.");
+  const answers = [answer("nodate", { title: "Note from the tax office", correspondent: "Wendmark Tax Office", created: null, sender_folder: "Wendmark Tax Office/<year>" })];
+  const w = await senderWorld({ extra: [doc], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("nodate"), /^Paperwork\/To sort\//);
+    assert.ok(w.tagNames(w.doc("nodate")).includes("Check this"));
+    const notes = fs.readFileSync(w.paths.outbox, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    assert.equal(notes.filter((n) => n.kind === "check" && n.doc === w.ids.nodate).length, 1);
+    const asked = w.prompts.length;
+    await w.runUntilQuiet();
+    assert.equal(w.prompts.length, asked);
   } finally { await w.close(); }
 });

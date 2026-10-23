@@ -196,3 +196,14 @@ test("a year never comes from the upload day: sorted by hand without a date, it 
     assert.equal(w.drive.byPath("Paperwork/Taxes/2026"), null);
   } finally { await w.close(); }
 });
+
+test("a year rule followed by a catch-all: a paper whose year is unknown waits, it does not fall into the catch-all", async () => {
+  const doc = { slug: "taxnodate", owner: "alex", content: "Fairford Tax Office. Information about your tax account. Reference TAXNODATE. Addressed to Alex Morgan, 12 Elm Row, 40210 Fairford." };
+  const answers = [{ match: ["TAXNODATE"], answer: { title: "Information about the tax account", correspondent: "Fairford Tax Office", document_type: "Tax assessment", tags: [], created: null, folder: null, confident: true } }];
+  const w = await kitWorld({ only: [], extra: [doc], answers, rules: [{ type: "Tax assessment", folder: "Taxes/{year}" }, { folder: "Letters" }] });
+  try {
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("taxnodate"), /^Paperwork\/To sort\//);
+    assert.ok(w.tagNames(w.doc("taxnodate")).includes("Check this"));
+  } finally { await w.close(); }
+});

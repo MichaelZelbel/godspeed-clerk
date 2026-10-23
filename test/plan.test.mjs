@@ -121,3 +121,13 @@ test("confirming makes \"To sort\" inside the documents folder and nothing else"
     await assert.rejects(confirmPlan(confined, { ...plan, rules: [{ type: "Invoice", folder: "Receipts/{sender}" }] }, settings), /Receipts/);
   } finally { await fake.close(); }
 });
+
+test("a plan proposed again never offers To sort as a folder", async () => {
+  const { fake, confined } = await kitDrive();
+  try {
+    const plan = { format: 1, status: "proposed", root: { id: fake.idOf("Paperwork"), name: "Paperwork" }, rules: [{ type: "Invoice", folder: "Invoices/{sender}" }] };
+    const done = await confirmPlan(confined, plan, settings);
+    assert.ok(readTree(confined).some((f) => f.name === "To sort"));
+    assert.ok(!readTree(confined, new Set([done.to_sort.id])).some((f) => f.name === "To sort"));
+  } finally { await fake.close(); }
+});
