@@ -285,7 +285,7 @@ async function main() {
       const { state, env } = await setUp(mode, fake);
       // The Clerk was running when the kit arrived: new letters, not an archive it found (which
       // gets no AI reading, F10), so their deadlines are read.
-      const st = JSON.parse(fs.readFileSync(path.join(state, "state.json"), "utf8"));
+      const sf = path.join(state, "state.json"), st = fs.existsSync(sf) ? JSON.parse(fs.readFileSync(sf, "utf8")) : {};
       fs.writeFileSync(path.join(state, "state.json"), JSON.stringify({ ...st, started_at: "2026-10-01T00:00:00Z" }));
       await runUntilQuiet(state, env);
       check(await snapshot() === before, "every document, tag, sender, type and custom field in Paperless is exactly as before");
