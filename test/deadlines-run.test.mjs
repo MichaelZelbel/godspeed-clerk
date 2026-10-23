@@ -75,7 +75,7 @@ test("F15: the letter whose period runs from receipt creates one counted from it
     assert.match(d.title, /\(check the date\)$/);
     assert.ok(w.noteOf("parking-notice").content.includes("by 2026-11-09 at the earliest"));
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the date of "${w.doc("parking-notice").title}", the real day may be later; check it on the paper.`), w.messages[0]);
+    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the letter's date, 9 October 2026; the real day may be later, check it on the paper "${w.doc("parking-notice").title}".`), w.messages[0]);
   } finally { await w.close(); }
 });
 
@@ -151,6 +151,7 @@ test("F15: a request with no workable day creates no deadline and sends no messa
     await w.runUntilQuiet();
     const [d] = of(w, "meter-letter");
     assert.equal(d.due, "2026-11-03", "two weeks from the date the person set");
+    assert.match(d.title, /\(check the date\)$/);
     assert.equal(w.messages.length, 1, "now one message: its date to check");
     assert.ok(!/tell your assistant|Set the letter's date/i.test(w.messages[0]), w.messages[0]);
   } finally { await w.close(); }
@@ -353,7 +354,7 @@ test("F18, F16: killed right after a deadline to check was made, the message sti
     await w.run();
     assert.equal(of(w, "parking-notice").length, 1);
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the date of "${w.doc("parking-notice").title}", the real day may be later; check it on the paper.`), w.messages[0]);
+    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the letter's date, 9 October 2026; the real day may be later, check it on the paper "${w.doc("parking-notice").title}".`), w.messages[0]);
   } finally { await w.close(); }
 });
 
@@ -570,7 +571,7 @@ test("F16: a deadline whose date needs a check is one plain sentence with its da
   try {
     await w.runUntilQuiet();
     const d = w.doc("parking-notice");
-    assert.deepEqual(w.messages, [`The Clerk: Object to the parking penalty notice PCN-88213 if it is wrong by 9 November 2026: counted from the date of "${d.title}", the real day may be later; check it on the paper. ${w.pl.url}/documents/${d.id}/details`]);
+    assert.deepEqual(w.messages, [`The Clerk: Object to the parking penalty notice PCN-88213 if it is wrong by 9 November 2026: counted from the letter's date, 9 October 2026; the real day may be later, check it on the paper "${d.title}". ${w.pl.url}/documents/${d.id}/details`]);
   } finally { await w.close(); }
 });
 
@@ -582,5 +583,83 @@ test("F16: no message links to the notebook's collection", async () => {
     await w.runUntilQuiet();
     assert.ok(w.messages.length >= 2);
     for (const m of w.messages) assert.ok(!/notebook\.example|collections/.test(m), m);
+  } finally { await w.close(); }
+});
+
+// The fresh review of the fix round (23 October 2026), with the real AI.
+test("F15: a contract that renews unless cancelled is a request, also when the AI calls it an option", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  const c = answers.find((a) => (a.match || []).includes("BB-30071"));
+  Object.assign(c.answer.requests[0], { option: true, terms_of: "contract" });
+  const w = await kitWorld({ only: ["contract-notice"], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "contract-notice").map((d) => d.due), ["2026-12-01"]);
+  } finally { await w.close(); }
+});
+
+test("F15: a withdrawal or return term of an order is an option, also when the AI forgets to say so", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  const o = answers.find((a) => (a.match || []).includes("ORD-90417"));
+  Object.assign(o.answer.requests[0], { option: false, terms_of: "order" });
+  const w = await kitWorld({ only: ["online-order"], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(of(w, "online-order").length, 0);
+    assert.equal(w.messages.length, 0);
+  } finally { await w.close(); }
+});
+
+test("F15: \"before your arrival\" is the day before, also when the AI wrote the arrival day as the date", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  const h = answers.find((a) => (a.match || []).includes("7741-2208"));
+  Object.assign(h.answer.requests[1], { by: "2026-10-26" });
+  const w = await kitWorld({ only: ["hotel-booking"], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "hotel-booking").map((d) => d.due), ["2026-10-25"]);
+  } finally { await w.close(); }
+});
+
+test("F15: \"Important\" the person took off stays off, also after lost records, and a tag they put back is theirs", async () => {
+  const w = await kitWorld({ only: ["water-invoice", "tax-office-letter"] });
+  try {
+    await w.runUntilQuiet();
+    const important = [...w.pl.state.tags.values()].find((t) => t.name === "Important").id;
+    change(w, "water-invoice", { tags: w.doc("water-invoice").tags.filter((t) => t !== important) });
+    change(w, "tax-office-letter", { tags: w.doc("tax-office-letter").tags.filter((t) => t !== important) });
+    await w.runUntilQuiet();
+    assert.equal(w.record("tax-office-letter").asks.important, "person", "the person's choice is kept");
+    fs.rmSync(path.join(w.paths.records, `${w.ids["water-invoice"]}.json`));
+    await w.runUntilQuiet();
+    assert.ok(!tagNames(w, "water-invoice").includes("Important"), "not put back after lost records");
+    // The person puts it back on the tax office's letter themselves, then closes its deadlines.
+    change(w, "tax-office-letter", { tags: [...w.doc("tax-office-letter").tags, important] });
+    for (const d of of(w, "tax-office-letter")) w.nb.personCloses(d.key);
+    await w.runUntilQuiet();
+    assert.ok(tagNames(w, "tax-office-letter").includes("Important"), "the person's own tag is theirs");
+  } finally { await w.close(); }
+});
+
+test("F16: when nobody sorts, the check-the-date sentence names the paper as a person knows it, never by its scan's name", async () => {
+  const w = await kitWorld({ sorting: "nobody", only: ["parking-notice"] });
+  try {
+    fs.writeFileSync(w.paths.state, JSON.stringify({ started_at: "2026-10-22T00:00:00Z" }));
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 1);
+    assert.ok(!/Scan /.test(w.messages[0]), w.messages[0]);
+    assert.ok(w.messages[0].includes("counted from the letter's date, 9 October 2026; the real day may be later, check it on the paper \"Letter\"."), w.messages[0]);
+  } finally { await w.close(); }
+});
+
+test("F16: with more to say than one deadline, each check-the-date sentence links to its own paper", async () => {
+  const w = await kitWorld({ only: ["parking-notice", "blurry-scan"], settings: { storage_paths: "yes" } });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 1);
+    const m = w.messages[0];
+    const paper = `${w.pl.url}/documents/${w.ids["parking-notice"]}/details`;
+    assert.ok(m.split("\n").some((l) => l.includes("by 9 November 2026") && l.endsWith(paper)), m);
+    assert.ok(/\/view\/\d+$/.test(m.split("\n").at(-1)), "the To sort page's link last");
   } finally { await w.close(); }
 });

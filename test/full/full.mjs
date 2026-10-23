@@ -521,7 +521,7 @@ async function main() {
       check(dl.length === wantDeadlines(ALEX.filter((s) => s !== "unusable-answer")), `no other deadline (${dl.length})`);
       const said = await NB.remindersOn("2026-11-18");
       check(said.includes("Pay the Brightwater Utilities electricity invoice of 212.40 EUR"), `Godspeed's own deadline reminders say it as its day comes (tools/due.js today on 18 November: ${JSON.stringify(said.slice(0, 300))})`);
-      check(/Deadlines: 5 made in Godspeed from your letters\./.test((await must(state, ["status"], env)).out), "status says how many deadlines the Clerk made");
+      check(new RegExp(`Deadlines: ${wantDeadlines(ALEX.filter((s) => s !== "unusable-answer"))} made in Godspeed from your letters\\.`).test((await must(state, ["status"], env)).out), "status says how many deadlines the Clerk made");
     } else console.log("  SKIP  the notes, the collection and the message (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
 
     section("F8: changes in Paperless and by hand in the drive");
@@ -657,7 +657,9 @@ async function main() {
     const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)) || noteBits.some((x) => b.includes(x)); });
     check(leaks.length === 0, `no log line, record or temporary file holds a sentence, a title or a note's summary${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");
-    if (NB) check(TG.sent.every((m) => linksIn(m).length === 1), "F16: every message carried exactly one link");
+    // F16: one link, and one more for each check-the-date sentence when there is more to say; never
+    // a link to the notebook's collection.
+    if (NB) check(TG.sent.every((m) => { const l = linksIn(m), dates = m.split("\n").filter((x) => / by \d{1,2} \w+ \d{4}: counted from/.test(x)).length; return l.length === (m.includes("\n") ? dates + 1 : 1) && !l.some((x) => /collections/.test(x)); }), "F16: every message carries its one link (and each check-the-date sentence its paper's), none to the collection");
 
     section("F4, F19: switched to \"nobody sorts\" and back");
     {

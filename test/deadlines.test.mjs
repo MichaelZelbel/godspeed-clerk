@@ -183,7 +183,7 @@ test("the note's reading knows today, for dates written without a year", () => {
 });
 
 test("the requests' words name a right to object or challenge within a period as a request", () => {
-  assert.match(requestsRule(DEFAULTS), /right to object, appeal or challenge/);
+  assert.match(requestsRule(DEFAULTS), /right to object to, appeal against or challenge/);
 });
 
 // Michael's first real paper with a date (23 October 2026), PRD F15 of cbe871c4.
@@ -194,7 +194,7 @@ test("an option the owner may use is no request: a booking's, ticket's or order'
   ]);
   assert.deepEqual(got.map((r) => [r.n, r.ask]), [[1, "Contact the property to arrange check-in"]]);
   assert.match(requestsRule(DEFAULTS), /"option": true/);
-  assert.match(requestsRule(DEFAULTS), /cancellation, change, return or withdrawal terms/);
+  assert.match(requestsRule(DEFAULTS), /cancellation, change, return, refund or withdrawal terms/);
 });
 
 test("before a printed date with no period: the day before that date", () => {
@@ -211,4 +211,24 @@ test("what a request asks is written in the language the person talks to Godspee
   const { system } = buildPrompt({ doc: { content: "A made-up letter", tags: [1] }, tax, settings, today: TODAY });
   assert.match(system, /"title": in German,/, "a paper's title stays in the language its folders are in");
   assert.match(system, /"ask": in English,/);
+});
+
+test("contract notice periods are requests; the terms of a booking, ticket or order are options, whatever the option flag says", () => {
+  const got = cleanRequests([
+    { ask: "Cancel the broadband contract", within: { amount: 30, unit: "days" }, counted_from: "before", from_date: "2026-12-31", option: true, terms_of: "contract" },
+    { ask: "Withdraw from the purchase", within: { amount: 14, unit: "days" }, counted_from: "receipt", option: false, terms_of: "order" },
+    { ask: "Cancel the hotel booking", by: "2026-10-25", terms_of: "booking" },
+    { ask: "Pay the order", by: "2026-11-01", terms_of: null },
+  ]);
+  assert.deepEqual(got.map((r) => r.ask), ["Cancel the broadband contract", "Pay the order"]);
+  assert.match(requestsRule(DEFAULTS), /"terms_of"/);
+});
+
+test("before a printed date: the day before it, also when the AI wrote that date as the last day; the earlier of two", () => {
+  const [a, b, c] = plan(reqs(
+    { by: "2026-11-06", counted_from: "before", from_date: "2026-11-06" },
+    { by: "2026-11-01", counted_from: "before", from_date: "2026-11-06" },
+    { by: "2026-12-31", within: { amount: 30, unit: "days" }, counted_from: "before", from_date: "2026-12-31" },
+  ), "2026-10-20", TODAY);
+  assert.deepEqual([a.due, b.due, c.due], ["2026-11-05", "2026-11-01", "2026-12-01"]);
 });

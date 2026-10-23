@@ -187,8 +187,10 @@ never counts a date: `deadlines.mjs` does.
   count from, a time limit the AI saw but could not give): no deadline, no message, no "Check
   this"; the note's key facts and the item say "date unclear".
 - Only what a letter asks the person to do is a request. The cancellation, change, return or
-  withdrawal terms of a booking, a ticket or an order are options: the AI marks one it lists anyway
-  with "option": true, and the Clerk leaves it out. A request's words are in the person's chat
+  withdrawal terms of a booking, a ticket or an order are options: the AI says whose terms an
+  entry is ("terms_of"), and the Clerk leaves out every booking's, ticket's or order's term and
+  every other entry the AI calls an option, except notice on a contract that otherwise renews,
+  which is a request. A request's words are in the person's chat
   language (`chat_language`, else `language`).
 - Months end on the same day number, or the month's last day (31 January plus a month is the end
   of February). A day already passed when the letter is read is not made; it goes into the note's
@@ -205,8 +207,8 @@ never counts a date: `deadlines.mjs` does.
 - The first reading stays the reading: once a note's header holds the requests, a letter read
   again changes nothing, so each deadline stays on its own request whatever order a new answer
   gives them in.
-- "Important" (when Godspeed sorts) while one of the paper's deadlines, as Godspeed has it now, is
-  still open and today or later; taken off after only when the Clerk put it on; never again once the person took
+- "Important" (when Godspeed sorts) is put on in the run that makes a deadline, and stays while one
+  of the paper's deadlines, as Godspeed has it now, is still open and today or later; taken off after only when the Clerk put it on; never again once the person took
   it off or had set it themselves.
 - Papers noted before deadlines were read get one reading each, in the notes' batches; the
   archive (sorted before the Clerk came) none.

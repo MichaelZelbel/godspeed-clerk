@@ -14,7 +14,14 @@
   paper in Paperless. No message links to the notebook's collection any more.
 - Deadline names in the language the person talks to Godspeed in (setting `chat_language`).
 - A deadline the person dropped or closed keeps no "Important" on its paper, and is never made
-  again.
+  again. "Important" is put on only in the run that makes the deadline, so a tag the person took
+  off never comes back, also after lost records.
+- The AI says whose terms an option is ("terms_of": booking, ticket, order, contract): a booking's,
+  ticket's or order's term is never a deadline whatever its option flag, and notice on a contract
+  that otherwise renews is a request though the AI called it an option. "Before" a printed date
+  wins over a last day the AI wrote as that date (the day before arrival, not the arrival day).
+- The check-the-date sentence names the letter's date it counted from and the paper as a person
+  knows it (never a scan's file name); with more to say, each such sentence links to its paper.
 
 ## 0.3.1 (batch 2b: sort in Paperless, and the drive follows)
 
