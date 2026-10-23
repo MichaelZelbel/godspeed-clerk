@@ -75,3 +75,21 @@ test("field values stay on one line and cannot make headings or links", () => {
   // Parentheses and other plain punctuation stay as they are, for the person and the assistant.
   assert.ok(part({ summary: "Total (incl. VAT) 12.00 EUR, due 1.5.2026." }).includes("Total (incl. VAT) 12.00 EUR, due 1.5.2026."));
 });
+
+test("what the notebook shows: no backslash its reader does not understand, italics with stars, the summary behind its label", () => {
+  // The notebook's own reader (ui/src/utils/markdown-converter.ts) understands \ * _ ` [ ] < & = ~
+  // after a backslash, and italics only as *...*.
+  const p = part({
+    summary: "1. Pay #7101 | now > soon - fine (VAT incl.).",
+    facts: ["- Order #7101 | 12.00 EUR > due 1.5.2026"],
+    fields: { sender: "Smith & Sons #2 | Ltd.", date: "2025-05-12" },
+  });
+  assert.ok(p.includes("**Summary:** 1. Pay #7101 | now > soon - fine (VAT incl.)."), p);
+  assert.ok(p.includes("- - Order #7101 | 12.00 EUR > due 1.5.2026"), p);
+  assert.ok(p.includes("- **Sender:** Smith & Sons #2 | Ltd."), p);
+  for (const bad of ["\\#", "\\|", "\\>", "\\.", "\\-", "\\(", "\\)", "\\&"]) assert.ok(!p.includes(bad), `no ${bad}`);
+  assert.ok(p.includes(`*${texts.hint}*`), "the hint in stars");
+  assert.ok(!/^_.*_$/m.test(p), "no underscore italics");
+  // What the reader does understand is still escaped: no emphasis, no link from a value.
+  assert.ok(part({ fields: { sender: "A_B*C [x](https://e.example)" } }).includes("A\\_B\\*C \\[x\\](https://e.example)"));
+});
