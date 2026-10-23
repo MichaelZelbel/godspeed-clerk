@@ -127,5 +127,9 @@ test("plan confirm: a Paperless with storage paths of its own is asked first, an
     assert.equal(ok.code, 0, ok.err);
     assert.ok(spNamed(w, "Letters"));
     assert.deepEqual(w.pl.state.storagePaths.get(mine.id), mine);
+    // What it says counts the storage paths it made, not the page with them.
+    const made = sps(w).length - 1;
+    assert.ok(ok.out.includes(`Paperless: ${made} storage paths for your folders and "To sort" (${made} made now, 0 levelled). The "To sort" page: `), ok.out);
+    assert.match(ok.out, /The "To sort" page: http\S+\/view\/\d+/);
   } finally { await w.close(); }
 });
