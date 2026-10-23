@@ -151,6 +151,7 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
     clearDeadlines: () => due.clear(),
     personMoves: (key, day, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).due = day; },
     personRenames: (key, title, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).title = title; },
+    personDrops: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "dropped"; d.closed_on = "2026-10-23"; },
     personCloses: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "closed"; d.closed_on = "2026-10-23"; },
     rows: (t) => visible(t).map((r) => structuredClone(r)),
     row: (t, id) => { const r = tables[t].get(id); return r && !r.removed_at ? structuredClone(r) : null; },

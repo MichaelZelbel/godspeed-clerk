@@ -185,3 +185,30 @@ test("the note's reading knows today, for dates written without a year", () => {
 test("the requests' words name a right to object or challenge within a period as a request", () => {
   assert.match(requestsRule(DEFAULTS), /right to object, appeal or challenge/);
 });
+
+// Michael's first real paper with a date (23 October 2026), PRD F15 of cbe871c4.
+test("an option the owner may use is no request: a booking's, ticket's or order's cancellation, change, return or refund terms", () => {
+  const got = cleanRequests([
+    { ask: "Cancel or change the booking", by: "2026-10-25", option: true },
+    { ask: "Contact the property to arrange check-in", counted_from: "before", from_date: "2026-10-26" },
+  ]);
+  assert.deepEqual(got.map((r) => [r.n, r.ask]), [[1, "Contact the property to arrange check-in"]]);
+  assert.match(requestsRule(DEFAULTS), /"option": true/);
+  assert.match(requestsRule(DEFAULTS), /cancellation, change, return or withdrawal terms/);
+});
+
+test("before a printed date with no period: the day before that date", () => {
+  const [a] = plan(reqs({ counted_from: "before", from_date: "2026-10-26" }), "2026-10-20", TODAY);
+  assert.deepEqual([a.kind, a.due, a.basis, a.check], ["date", "2026-10-25", "fixed", false]);
+  const [b] = plan(reqs({ counted_from: "before" }), "2026-10-20", TODAY);
+  assert.equal(b.kind, "nodate", "before a day the letter does not print");
+});
+
+test("what a request asks is written in the language the person talks to Godspeed in", () => {
+  const settings = { ...DEFAULTS, language: "German", chat_language: "English" };
+  assert.match(requestsRule(settings), /"ask": in English,/);
+  const tax = { tags: new Map([[1, { id: 1, name: "Inbox", is_inbox_tag: true }]]), correspondents: new Map(), types: new Map(), inboxIds: () => [1], name: () => null, tag: () => null };
+  const { system } = buildPrompt({ doc: { content: "A made-up letter", tags: [1] }, tax, settings, today: TODAY });
+  assert.match(system, /"title": in German,/, "a paper's title stays in the language its folders are in");
+  assert.match(system, /"ask": in English,/);
+});

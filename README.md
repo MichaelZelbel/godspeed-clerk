@@ -54,21 +54,26 @@ repository: `docs/proposals/paperless-addon.md`.
 - **Turns a letter's deadline into a Godspeed deadline**: "pay by 20 November" becomes a deadline
   in Godspeed, which reminds you as the day comes, the way it reminds you of any deadline; the
   Clerk sends no reminders of its own. Each request with a date is its own deadline, named by
-  what it asks, with a link to the document.
+  what it asks (in the language you talk to Godspeed in), with a link to the document.
+  - Only what a letter asks you to do: pay, reply, object, send, sign, appear, contact. The
+    cancellation, change, return or refund terms of a booking, a ticket or an order are options
+    you may use, never a deadline; they go into the note's key facts.
   - A date written in the letter is taken as written; one written without a year is the next
     such day after the letter's date. A period ("within one month of this notice") is counted
     from the day the letter prints; one before a date ("at the latest six weeks before the lease
-    ends on 31 December") is counted back from it. When it runs from a day the letter does
+    ends on 31 December") is counted back from it, and "before your arrival on 26 October" is
+    the day before that date. When it runs from a day the letter does
     not print (the day it reached you), the Clerk counts from the letter's own date, the earliest
     the day can be, and asks you to check the date. The upload day is never counted from.
-  - A period with no date on the letter to count from: no deadline; the letter is to check and you
-    are asked for its date. Vague wording ("as soon as possible"): no deadline, the request goes
-    into the note's key facts. A day already passed (an old letter from your pile): into the
+  - A request whose day cannot be worked out from the letter: no deadline and no message; it goes
+    into the note's key facts and the Documents list as "date unclear". Vague wording ("as soon as
+    possible"): no deadline, the request goes into the note's key facts. A day already passed (an old letter from your pile): into the
     note's key facts, no deadline.
   - Each deadline is made once, however often the letter is read. Once you change or close one in
     Godspeed, it is yours: the Clerk never changes it again. When you correct a letter's date in
     Paperless, a deadline counted from it moves, unless you changed it.
-  - When Godspeed sorts, the letter gets the tag "Important" until the day has passed.
+  - When Godspeed sorts, the letter gets the tag "Important" until the day has passed; never again
+    once you took it off, or dropped or closed the deadline.
   - Papers noted by an earlier version get their deadlines read once, a few at a time, without
     being sorted or filed again.
 - **You sort in Paperless, and the drive follows**: Paperless's "storage path" list holds your own

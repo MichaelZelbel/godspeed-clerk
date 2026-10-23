@@ -20,11 +20,11 @@ test("F16: a run over the kit sends exactly one message, counting the blurry doc
     assert.equal(w.messages.length, 1);
     const [m] = w.messages;
     assert.match(m, /2 papers are waiting to be sorted\./, "the blurry document and the answer unusable twice");
-    // F15: the letter whose deadline was counted from a day it does not print, and the one with no
-    // date to count from, in the same message.
-    assert.ok(m.includes(`please check them: "${w.doc("parking-notice").title}"`), m);
-    assert.ok(m.includes(`Set the letter's date in Paperless and the Clerk makes the deadline: "${w.doc("meter-letter").title}"`), m);
-    for (const slug of ["water-invoice", "tax-office-letter", "gym-letter", "library-reminder"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);
+    // F15: the letter whose deadline was counted from a day it does not print, in one plain
+    // sentence; the one with no workable day is not in a message at all (PRD of cbe871c4).
+    assert.ok(m.includes(`by 9 November 2026: counted from the date of "${w.doc("parking-notice").title}", the real day may be later; check it on the paper.`), m);
+    for (const slug of ["water-invoice", "tax-office-letter", "gym-letter", "library-reminder", "meter-letter"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);
+    assert.ok(!/tell your assistant|Set the letter's date/i.test(m), m);
     assert.deepEqual(links(m), [viewLink(w)]);
     assert.deepEqual(w.pl.viewDocs(viewOf(w).id), [w.ids["blurry-scan"], w.ids["unusable-answer"]].sort((a, b) => a - b), "the page lists exactly the papers waiting to be sorted");
     for (const slug of ["utility-invoice", "council-letter", "doctor-letter"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);

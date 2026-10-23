@@ -470,9 +470,9 @@ async function main() {
       check((ui.sidebar_views_visible_ids || []).includes(view?.id) && (ui.dashboard_views_visible_ids || []).includes(view?.id), "F19: shown in the sidebar and on the dashboard");
       check(JSON.stringify(await listed()) === JSON.stringify(waitingSlugs.map((sl) => ids[sl]).sort((a, b) => a - b)), `F19: the To sort page lists exactly the papers left in To sort (${waitingSlugs.join(", ")})`);
       const n = waitingSlugs.length, line = n === 1 ? "1 paper is waiting to be sorted." : `${n} papers are waiting to be sorted.`;
-      if (!upgrade) check(TG.sent.length === 1 && TG.sent[0].includes(line) && [parking, meter].every((x) => TG.sent[0].includes(`"${x.title}"`)) && JSON.stringify(linksIn(TG.sent[0])) === JSON.stringify([viewLink]),
-        `F16: the run over the kit sent exactly one message, counting the papers to sort and naming the letters whose deadlines need a check, with a link that opens the To sort page (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
-      else check(TG.sent.length === base + 1 && TG.sent[base].includes(line) && [parking, meter].every((x) => TG.sent[base].includes(`"${x.title}"`)) && JSON.stringify(linksIn(TG.sent[base])) === JSON.stringify([viewLink]),
+      if (!upgrade) check(TG.sent.length === 1 && TG.sent[0].includes(line) && TG.sent[0].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[0].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[0]) && JSON.stringify(linksIn(TG.sent[0])) === JSON.stringify([viewLink]),
+        `F16: the run over the kit sent exactly one message, counting the papers to sort and naming the letter whose deadline needs a check in one sentence with its date (the letter with no workable day not at all), with a link that opens the To sort page (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
+      else check(TG.sent.length === base + 1 && TG.sent[base].includes(line) && TG.sent[base].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[base].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[base]) && JSON.stringify(linksIn(TG.sent[base])) === JSON.stringify([viewLink]),
         `F16: after the update exactly one message counts the papers to sort and names the letters whose deadlines need a check, with the To sort page's link (${TG.sent.length - base}: ${JSON.stringify(TG.sent[base] || "")})`);
       await must(state, ["run"], env);
       check(TG.sent.length === base + 1, "F16: a second run with nothing new sends none");
@@ -509,7 +509,13 @@ async function main() {
       check(ofDoc("gym-letter").length === 0, "a vague request made none");
       const gymNote = (await NB.notes()).find((n) => n.clerk_doc === ids["gym-letter"]);
       check(!!gymNote && gymNote.content.includes("Return the signed membership form to Elm Row Fitness (no date given)"), "and it is in the note's key facts");
-      check(ofDoc("meter-letter").length === 0 && meter.tags.includes(tagIds["Check this"]), "no printed date to count from: no deadline, and the letter is to check");
+      check(ofDoc("meter-letter").length === 0 && !meter.tags.includes(tagIds["Check this"]), "no workable day: no deadline, no message, and the filed letter is not put back to sort");
+      const meterItem = (await NB.items()).find((i) => i.source_id === sumOf("meter-letter"));
+      check(meterItem?.data.deadlines === "date unclear", `and its item says "date unclear" (${meterItem?.data.deadlines})`);
+      const hotel = ofDoc("hotel-booking");
+      check(hotel.length === 1 && hotel[0].due === "2026-10-25" && /^Contact Hotel Seabright/.test(hotel[0].title), `the hotel booking made one deadline only, to contact the property, the day before arrival (${JSON.stringify(hotel.map((x) => [x.title, x.due]))})`);
+      check(ofDoc("train-ticket").length === 0 && ofDoc("online-order").length === 0 && !dl.some((x) => /cancel|refund|return/i.test(x.title) && !/contract/i.test(x.title)), "a ticket's refund terms and an order's return window made none");
+      check(ofDoc("contract-notice")[0]?.due === "2026-12-01" && ofDoc("appointment-letter")[0]?.due === "2026-11-11", "a time limit before a printed date counts from it: 30 days before the contract ends, the day before the appointment");
       const clinic = ofDoc("clinic-letter");
       check(clinic.length === 1 && clinic[0].title === "Follow-up appointment reminder, 2026-10-14" && clinic[0].due === "2026-11-27", `F11: the letter kept out of the notebook has its deadline, named only by its title and date (${JSON.stringify(clinic)})`);
       check(dl.length === wantDeadlines(ALEX.filter((s) => s !== "unusable-answer")), `no other deadline (${dl.length})`);

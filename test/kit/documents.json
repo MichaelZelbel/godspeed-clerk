@@ -21,6 +21,11 @@
     {"slug": "library-reminder", "owner": "alex"},
     {"slug": "meter-letter", "owner": "alex"},
     {"slug": "clinic-letter", "owner": "alex", "upload": {"tags": ["Not in notebook"]}},
+    {"slug": "hotel-booking", "owner": "alex"},
+    {"slug": "train-ticket", "owner": "alex"},
+    {"slug": "online-order", "owner": "alex"},
+    {"slug": "contract-notice", "owner": "alex"},
+    {"slug": "appointment-letter", "owner": "alex"},
     {"slug": "second-account-letter", "owner": "sam"}
   ]
 }

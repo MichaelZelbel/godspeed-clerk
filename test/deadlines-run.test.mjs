@@ -75,7 +75,7 @@ test("F15: the letter whose period runs from receipt creates one counted from it
     assert.match(d.title, /\(check the date\)$/);
     assert.ok(w.noteOf("parking-notice").content.includes("by 2026-11-09 at the earliest"));
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes("please check them") && w.messages[0].includes(`"${w.doc("parking-notice").title}"`), w.messages[0]);
+    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the date of "${w.doc("parking-notice").title}", the real day may be later; check it on the paper.`), w.messages[0]);
   } finally { await w.close(); }
 });
 
@@ -134,25 +134,25 @@ test("F15: a corrected letter date moves an untouched deadline counted from it; 
   } finally { await w.close(); }
 });
 
-test("F15: no usable date: \"Check this\", one message asking for the date, and the deadline once the date is set", async () => {
+test("F15: a request with no workable day creates no deadline and sends no message; it is in the key facts and the item as \"date unclear\", never \"Check this\"", async () => {
   const w = await kitWorld({ only: ["meter-letter"] });
   try {
     await w.runUntilQuiet();
     assert.equal(w.nb.deadlineRows().length, 0);
-    assert.ok(tagNames(w, "meter-letter").includes("Check this"));
-    assert.ok(w.noteOf("meter-letter").content.includes("the letter sets a period but prints no date to count from"));
-    assert.equal(w.messages.length, 1);
-    assert.match(w.messages[0], /Set the letter's date in Paperless/);
-    assert.ok(w.messages[0].includes(`"${w.doc("meter-letter").title}"`));
+    assert.equal(w.messages.length, 0, "no message");
+    assert.ok(!tagNames(w, "meter-letter").includes("Check this"), "a filed letter is not put back to sort");
+    const facts = w.noteOf("meter-letter").content.split("## Key facts")[1].split("##")[0];
+    assert.ok(facts.includes("Send the electricity meter reading to Brightwater Utilities (date unclear)"), facts);
     const item = w.nb.rows("collection_items")[0];
-    assert.equal(item.data.status, "check this");
-    // The person reads the letter's date off the envelope and sets it.
+    assert.equal(item.data.deadlines, "date unclear");
+    assert.equal(item.data.status, "sorted");
+    // The person sets the letter's date in Paperless after all: then the period has its day, silently.
     change(w, "meter-letter", { created: "2026-10-20" });
     await w.runUntilQuiet();
     const [d] = of(w, "meter-letter");
     assert.equal(d.due, "2026-11-03", "two weeks from the date the person set");
-    assert.match(d.title, /\(check the date\)$/);
-    assert.equal(w.messages.filter((m) => /Set the letter's date/.test(m)).length, 1, "asked once");
+    assert.equal(w.messages.length, 1, "now one message: its date to check");
+    assert.ok(!/tell your assistant|Set the letter's date/i.test(w.messages[0]), w.messages[0]);
   } finally { await w.close(); }
 });
 
@@ -218,7 +218,9 @@ for (const sorting of ["paperless", "nobody"]) {
       assert.equal(w.pl.snapshot(), before);
       for (const slug of LETTERS) assert.deepEqual(of(w, slug).map((d) => d.due).sort(), (expected(slug).deadlines || []).map((x) => x.due).sort(), slug);
       const meter = w.nb.rows("collection_items").find((i) => i.source_id === w.record("meter-letter").sum);
-      assert.equal(meter.data.status, "check this", "no tag: the status says it");
+      // No workable day: "date unclear", never a paper to check (PRD F15 of cbe871c4).
+      assert.equal(meter.data.deadlines, "date unclear");
+      assert.notEqual(meter.data.status, "check this");
     } finally { await w.close(); }
   });
 }
@@ -322,7 +324,7 @@ test("upgrade: a paper sorted under the batch-2 code gets its deadlines read onc
     // What needs a check after the update comes as one message, once the reading is done.
     const told = w.messages.slice(sent);
     assert.equal(told.length, 1, told.join(" | "));
-    assert.ok(told[0].includes(`"${w.doc("parking-notice").title}"`) && told[0].includes(`"${w.doc("meter-letter").title}"`), told[0]);
+    assert.ok(told[0].includes(`"${w.doc("parking-notice").title}"`) && !told[0].includes(w.doc("meter-letter").title), told[0]);
     const all = w.nb.deadlineRows().length;
     await w.runUntilQuiet();
     assert.equal(readings(), LETTERS.length + 1, "read once");
@@ -351,7 +353,7 @@ test("F18, F16: killed right after a deadline to check was made, the message sti
     await w.run();
     assert.equal(of(w, "parking-notice").length, 1);
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`please check them: "${w.doc("parking-notice").title}"`), w.messages[0]);
+    assert.ok(w.messages[0].includes(`by 9 November 2026: counted from the date of "${w.doc("parking-notice").title}", the real day may be later; check it on the paper.`), w.messages[0]);
   } finally { await w.close(); }
 });
 
@@ -451,19 +453,17 @@ const LEASE = { slug: "lease-letter", owner: "alex", content: "Elmstead Lettings
 const LEASE_ANSWER = { match: ["LT-5521"], answer: { title: "Garage tenancy notice", correspondent: "Elmstead Lettings", document_type: "Letter", tags: [], created: "2026-10-18", folder: "Letters", confident: true, summary: "Elmstead Lettings explains how to end the garage tenancy.", key_facts: ["Tenancy LT-5521"],
   requests: [{ ask: "Tell Elmstead Lettings in writing if you want to end the garage tenancy", by: null, within: { amount: 4, unit: "weeks" }, counted_from: "before", from_date: null, vague: false }] } };
 
-test("F15, F16: a time limit before a day the letter does not print is asked about in its own words, not by asking for the letter's date", async () => {
+test("F15: a time limit before a day the letter does not print: no deadline, no message, \"date unclear\"", async () => {
   const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
   const w = await kitWorld({ only: [], extra: [LEASE], answers: [LEASE_ANSWER, ...answers] });
   try {
     await w.runUntilQuiet();
     assert.equal(w.nb.deadlineRows().length, 0);
-    assert.ok(w.tagNames(w.doc("lease-letter")).includes("Check this"));
-    assert.equal(w.messages.length, 1);
-    assert.ok(!/Set the letter's date/.test(w.messages[0]), w.messages[0]);
-    assert.ok(w.messages[0].includes(`A time limit the Clerk could not read; please look at the letter and tell your assistant its day: "${w.doc("lease-letter").title}"`), w.messages[0]);
-    assert.ok(w.noteOf("lease-letter").content.includes("Tell Elmstead Lettings in writing if you want to end the garage tenancy: the letter sets a time limit the Clerk could not read"));
+    assert.ok(!w.tagNames(w.doc("lease-letter")).includes("Check this"));
+    assert.equal(w.messages.length, 0);
+    assert.ok(w.noteOf("lease-letter").content.includes("Tell Elmstead Lettings in writing if you want to end the garage tenancy (date unclear)"));
     const item = w.nb.rows("collection_items")[0];
-    assert.equal(item.data.deadlines, "time limit not readable");
+    assert.equal(item.data.deadlines, "date unclear");
   } finally { await w.close(); }
 });
 
@@ -476,5 +476,111 @@ test("F11 and F18: under nobody sorts, a kept-out deadline keeps its name when t
     fs.rmSync(w.paths.records, { recursive: true, force: true });
     await w.runUntilQuiet();
     assert.equal(of(w, "clinic-letter")[0].title, "Letter, 2026-10-14", "never renamed after the upload day");
+  } finally { await w.close(); }
+});
+
+// Michael's first real paper with a date (23 October 2026): a hotel booking whose free-cancellation
+// date became "cancel the booking", a message that asked him to tell his assistant a date, and
+// "Check this" put back on a paper he had sorted. PRD F15 and F16 of cbe871c4.
+const NEW = ["hotel-booking", "train-ticket", "online-order", "contract-notice", "appointment-letter"];
+
+test("F15: a hotel booking with free cancellation until a date and \"please contact the property before arrival\" creates one deadline only, to contact the property, on the day before the printed arrival date", async () => {
+  const w = await kitWorld({ only: ["hotel-booking"] });
+  try {
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "hotel-booking").map((d) => [d.title, d.due]), [["Contact Hotel Seabright to arrange check-in", "2026-10-25"]]);
+    const facts = w.noteOf("hotel-booking").content.split("## Key facts")[1].split("##")[0];
+    assert.ok(facts.includes("Free cancellation and changes until 25 October 2026"), "the cancellation term is a key fact, not a deadline");
+    assert.ok(tagNames(w, "hotel-booking").includes("Important"));
+    assert.equal(w.messages.length, 0);
+  } finally { await w.close(); }
+});
+
+test("F15: the cancellation, change, return and refund terms of bookings, tickets and orders never become a deadline", async () => {
+  const w = await kitWorld({ only: ["train-ticket", "online-order", "hotel-booking"] });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(of(w, "train-ticket").length, 0);
+    assert.equal(of(w, "online-order").length, 0);
+    assert.ok(!w.nb.deadlineRows().some((d) => /cancel|refund|return/i.test(d.title)), JSON.stringify(w.nb.deadlineRows().map((d) => d.title)));
+    for (const slug of ["train-ticket", "online-order"]) assert.ok(!tagNames(w, slug).includes("Important") && !tagNames(w, slug).includes("Check this"), slug);
+    assert.equal(w.messages.length, 0);
+  } finally { await w.close(); }
+});
+
+test("F15: a time limit tied to another date in the letter counts from that date: before the appointment, days before the contract ends", async () => {
+  const w = await kitWorld({ only: ["contract-notice", "appointment-letter"] });
+  try {
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "contract-notice").map((d) => d.due), ["2026-12-01"], "30 days before 31 December");
+    assert.deepEqual(of(w, "appointment-letter").map((d) => d.due), ["2026-11-11"], "before the appointment on 12 November: the day before");
+  } finally { await w.close(); }
+});
+
+test("F15: a paper the person already placed never gets \"Check this\" back from its deadlines", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  // Unsure when sorting (to check), so the person places it; its reading then finds a request
+  // without a workable day.
+  const doc = { slug: "booking-unsure", owner: "alex", content: "Tripwise Travel. Booking 5512-HX for Alex Morgan, 12 Elm Row, 40210 Fairford. Please contact the property before your stay to arrange check-in. Free cancellation until the day before." };
+  const answer = { match: ["5512-HX"], answer: { title: "Booking", correspondent: "Tripwise Travel", document_type: "Letter", tags: [], created: null, folder: null, confident: false, summary: "A booking.", key_facts: ["Booking 5512-HX"],
+    requests: [{ ask: "Contact the property to arrange check-in", by: null, within: null, counted_from: "before", from_date: null, vague: false }] } };
+  const w = await kitWorld({ only: [], extra: [doc], answers: [answer, ...answers] });
+  try {
+    await w.runUntilQuiet();
+    assert.ok(tagNames(w, "booking-unsure").includes("Check this"), "unsure: to check");
+    const check = [...w.pl.state.tags.values()].find((t) => t.name === "Check this").id;
+    const letter = [...w.pl.state.types.values()].find((t) => t.name === "Letter").id;
+    change(w, "booking-unsure", { document_type: letter, created: "2026-10-19", tags: w.doc("booking-unsure").tags.filter((t) => t !== check) });
+    await w.runUntilQuiet();
+    await w.runUntilQuiet();
+    assert.ok(!tagNames(w, "booking-unsure").includes("Check this"), "the person's sorting stays");
+    assert.equal(w.nb.deadlineRows().length, 0);
+    assert.ok(w.messages.every((m) => !/tell your assistant|date/i.test(m)), w.messages.join(" | "));
+  } finally { await w.close(); }
+});
+
+test("F15: after the person drops a deadline the Clerk made, it is never made again and \"Important\" never comes back", async () => {
+  const w = await kitWorld({ only: ["water-invoice", "tax-office-letter"] });
+  try {
+    await w.runUntilQuiet();
+    const water = keyOf(w.record("water-invoice").sum, 1);
+    const important = [...w.pl.state.tags.values()].find((t) => t.name === "Important").id;
+    // Water: dropped, and the person takes Important off too.
+    w.nb.personDrops(water);
+    change(w, "water-invoice", { tags: w.doc("water-invoice").tags.filter((t) => t !== important) });
+    // Tax office: both its deadlines dropped; Important left on: the Clerk's own comes off.
+    for (const d of of(w, "tax-office-letter")) w.nb.personDrops(d.key);
+    await w.runUntilQuiet();
+    assert.ok(!tagNames(w, "water-invoice").includes("Important"));
+    assert.ok(!tagNames(w, "tax-office-letter").includes("Important"), "nothing open is ahead any more");
+    // Lost records, the letters read again from their notes: still nothing made, nothing put back.
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    const inbox = [...w.pl.state.tags.values()].find((t) => t.name === "Inbox").id;
+    change(w, "water-invoice", { tags: [...w.doc("water-invoice").tags, inbox] });
+    await w.runUntilQuiet();
+    assert.equal(w.nb.deadlineRows().length, 3, "no deadline made again");
+    assert.ok(w.nb.deadlineRows().every((d) => d.state === "dropped"));
+    assert.ok(!tagNames(w, "water-invoice").includes("Important"));
+    assert.ok(!tagNames(w, "tax-office-letter").includes("Important"));
+  } finally { await w.close(); }
+});
+
+test("F16: a deadline whose date needs a check is one plain sentence with its date and the paper's title, linking to the paper in Paperless", async () => {
+  const w = await kitWorld({ only: ["parking-notice"] });
+  try {
+    await w.runUntilQuiet();
+    const d = w.doc("parking-notice");
+    assert.deepEqual(w.messages, [`The Clerk: Object to the parking penalty notice PCN-88213 if it is wrong by 9 November 2026: counted from the date of "${d.title}", the real day may be later; check it on the paper. ${w.pl.url}/documents/${d.id}/details`]);
+  } finally { await w.close(); }
+});
+
+test("F16: no message links to the notebook's collection", async () => {
+  const w = await kitWorld({ only: ["parking-notice", "tax-office-letter"] });
+  try {
+    await w.runUntilQuiet();
+    w.pl.remove(w.ids["tax-office-letter"]);
+    await w.runUntilQuiet();
+    assert.ok(w.messages.length >= 2);
+    for (const m of w.messages) assert.ok(!/notebook\.example|collections/.test(m), m);
   } finally { await w.close(); }
 });

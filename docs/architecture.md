@@ -180,11 +180,16 @@ never counts a date: `deadlines.mjs` does.
 - The day a period counts from is Paperless's date, unless that is the upload day nobody read
   off the letter or set since the Clerk first saw the paper; then the date the AI read; else none.
   A period before a printed date ("at the latest six weeks before the lease ends") counts back
-  from it. A date written without a year is the next such day on or after the letter's date. A
-  time limit the AI saw but could not give (no date, no period, not vague) is asked for, like a
-  period with no date to count from. A period from receipt (or any day the
-  letter does not print) counts from the letter's date, the earliest the day can be, marked
-  "check the date". No date to count from: no deadline, "Check this" and a message asking for it.
+  from it; "before" a printed date with no period is the day before it ("contact the property
+  before your arrival"). A date written without a year is the next such day on or after the
+  letter's date. A period from receipt (or any day the letter does not print) counts from the
+  letter's date, the earliest the day can be, marked "check the date". No workable day (no date to
+  count from, a time limit the AI saw but could not give): no deadline, no message, no "Check
+  this"; the note's key facts and the item say "date unclear".
+- Only what a letter asks the person to do is a request. The cancellation, change, return or
+  withdrawal terms of a booking, a ticket or an order are options: the AI marks one it lists anyway
+  with "option": true, and the Clerk leaves it out. A request's words are in the person's chat
+  language (`chat_language`, else `language`).
 - Months end on the same day number, or the month's last day (31 January plus a month is the end
   of February). A day already passed when the letter is read is not made; it goes into the note's
   key facts with the vague requests.
@@ -201,7 +206,7 @@ never counts a date: `deadlines.mjs` does.
   again changes nothing, so each deadline stays on its own request whatever order a new answer
   gives them in.
 - "Important" (when Godspeed sorts) while one of the paper's deadlines, as Godspeed has it now, is
-  today or later; taken off after only when the Clerk put it on; never again once the person took
+  still open and today or later; taken off after only when the Clerk put it on; never again once the person took
   it off or had set it themselves.
 - Papers noted before deadlines were read get one reading each, in the notes' batches; the
   archive (sorted before the Clerk came) none.

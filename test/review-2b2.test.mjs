@@ -465,7 +465,8 @@ test("M9: status counts the papers waiting on the To sort page, not filed letter
   const w = await kitWorld({ only: ["blurry-scan", "meter-letter", "utility-invoice"], settings: yes });
   try {
     await w.runUntilQuiet();
-    assert.ok(w.tagNames(w.doc("meter-letter")).includes("Check this"), "the letter without a date is to check");
+    // A letter without a workable day is no longer a paper to check (PRD F15 of cbe871c4).
+    assert.ok(!w.tagNames(w.doc("meter-letter")).includes("Check this"), "a letter without a date is not put back to sort");
     assert.match(statusReport(w.paths, { env: {}, home: w.paths.root }), /To sort in Paperless: 1 paper waiting/);
   } finally { await w.close(); }
 });

@@ -1,5 +1,21 @@
 # Changes
 
+## 0.3.2 (batch 3 fix round, after the first real paper with a date)
+
+- Only what a letter asks the person to do becomes a deadline. A booking's, ticket's or order's
+  cancellation, change, return or withdrawal terms are options: key facts only (a hotel booking's
+  free-cancellation date had become "cancel the booking", for a trip being taken).
+- A time limit before a date the letter prints counts from that date; "before your arrival" is the
+  day before the arrival.
+- No workable day: no deadline, no message, no "Check this" (a sorted paper had been put back to
+  sort, and a message asked to tell the assistant a date); "date unclear" in the key facts and the
+  Documents item.
+- A deadline to check is one plain sentence with its day and the paper's title, linking to the
+  paper in Paperless. No message links to the notebook's collection any more.
+- Deadline names in the language the person talks to Godspeed in (setting `chat_language`).
+- A deadline the person dropped or closed keeps no "Important" on its paper, and is never made
+  again.
+
 ## 0.3.1 (batch 2b: sort in Paperless, and the drive follows)
 
 - A paper the Clerk cannot place is sorted in Paperless: with the person's yes, Paperless's storage
