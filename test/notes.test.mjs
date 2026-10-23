@@ -411,3 +411,58 @@ test("a paper to check that the person sorts by hand later gets its summary then
     assert.equal(summaries(w), 1);
   } finally { await w.close(); }
 });
+
+// The notebook's own processing reads every new note, at most 40 a day, oldest first: a pile of
+// papers would hold the person's own notes back for weeks, and pay again for summaries the Clerk
+// already wrote. Every note the Clerk writes carries skip_processing (Godspeed's notebook): found by
+// search and by the assistant like any note, but never queued for processing.
+test("F10: every note the Clerk writes is for search, not for the notebook's processing", async () => {
+  const w = await kitWorld();
+  try {
+    await w.runUntilQuiet();
+    assert.ok(w.notes().length > 3);
+    for (const n of w.notes()) assert.equal(n.skip_processing, true, n.title);
+  } finally { await w.close(); }
+});
+
+test("notes written before the mark get it at the next run: one small update each, nothing else changes", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "pay-slip", "doctor-letter"] });
+  try {
+    await w.runUntilQuiet();
+    // As an earlier version left them: no mark on the notes, none in the records.
+    const n = w.noteOf("utility-invoice");
+    w.nb.edit("notes", n.id, { content: `${n.content}\nPaid on 25 March.\n` });
+    for (const x of w.notes()) w.nb.edit("notes", x.id, { skip_processing: undefined });
+    for (const slug of ["utility-invoice", "pay-slip"]) { const r = w.record(slug); delete r.note.marked; fs.writeFileSync(`${w.paths.records}/${w.ids[slug]}.json`, JSON.stringify(r)); }
+    const before = new Map(w.notes().map((x) => [x.id, x]));
+    const prompts = w.prompts.length, reads = w.pl.state.requests.length;
+    await w.runUntilQuiet();
+    for (const x of w.notes()) {
+      assert.equal(x.skip_processing, true, x.title);
+      const { skip_processing, _hash, revision, updated_at, ...rest } = x, old = before.get(x.id);
+      assert.deepEqual(rest, (({ skip_processing: _s, _hash: _h, revision: _r, updated_at: _u, ...o }) => o)(old), "only the mark changed");
+    }
+    assert.ok(w.noteOf("utility-invoice").content.endsWith("Paid on 25 March.\n"));
+    assert.equal(w.prompts.length, prompts, "no AI call");
+    assert.equal(w.pl.state.requests.slice(reads).filter((q) => /^\/api\/documents\/\d+\/$/.test(q.path)).length, 0, "no document read again from Paperless");
+    // And the run after asks the notebook nothing about them again.
+    const writes = w.nb.writes.length;
+    await w.run();
+    assert.equal(w.nb.writes.filter((x, i) => i >= writes && x.table === "notes").length, 0);
+  } finally { await w.close(); }
+});
+
+test("a note in the notebook's trash, or one the person changed inside the Clerk's part, is marked too and otherwise left alone", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "pay-slip"] });
+  try {
+    await w.runUntilQuiet();
+    const a = w.noteOf("utility-invoice"), b = w.noteOf("pay-slip");
+    w.nb.edit("notes", a.id, { is_trashed: true, skip_processing: undefined });
+    w.nb.edit("notes", b.id, { content: b.content.replace(/\n## /, "\nMy own words in the middle.\n## "), skip_processing: undefined });
+    for (const slug of ["utility-invoice", "pay-slip"]) { const r = w.record(slug); delete r.note.marked; fs.writeFileSync(`${w.paths.records}/${w.ids[slug]}.json`, JSON.stringify(r)); }
+    await w.runUntilQuiet();
+    const a2 = w.noteOf("utility-invoice"), b2 = w.noteOf("pay-slip");
+    assert.equal(a2.skip_processing, true); assert.equal(a2.is_trashed, true, "it stays in the trash");
+    assert.equal(b2.skip_processing, true); assert.equal(b2.content, b.content.replace(/\n## /, "\nMy own words in the middle.\n## "));
+  } finally { await w.close(); }
+});

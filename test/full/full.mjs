@@ -363,6 +363,7 @@ async function main() {
       check(text, "F10: each note holds the document's full text as Paperless read it");
       check(links, "F10: each note links to the document in Paperless and to its file in the drive");
       check(sums, "F10: every document the Clerk sorted has its summary in the note");
+      check(notes.length > 0 && notes.every((n) => n.skip_processing === true), "F10: every note is for search, not for the notebook's processing (skip_processing, kept by the real notebook)");
       check(items.length === done.length && fields, `F17: one item per document with every field as its expected-result file says (${items.length} of ${done.length})`);
       check((await NB.collections()).length === 1 && (await NB.collections())[0].name === "Documents", "F17: one collection, \"Documents\"");
       const blurry = await doc("blurry-scan");
