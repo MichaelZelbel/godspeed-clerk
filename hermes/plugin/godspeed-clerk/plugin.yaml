@@ -1,0 +1,9 @@
+name: godspeed-clerk
+version: "0.2.2"
+description: >-
+  Shows the model the questions the Clerk asked the person about papers it could not place, with
+  each choice's number and the command that answers it, once per turn, before it reads the
+  message (pre_llm_call). Prints nothing when nothing waits. Installed by
+  `godspeed-clerk assistant install` (setup runs it).
+author: godspeed-clerk
+kind: standalone
