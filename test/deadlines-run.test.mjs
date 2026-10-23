@@ -241,12 +241,15 @@ test("F18: with the records deleted, no deadline twice and none changed", async 
   try {
     await w.runUntilQuiet();
     assert.equal(w.nb.deadlineRows().length, 5, "water 1, tax office 2, parking 1, clinic 1");
+    // The person moved one: the item shows their day, also once the records are gone.
+    w.nb.personMoves(keyOf(w.record("water-invoice").sum, 1), "2026-11-27");
+    await w.runUntilQuiet();
     const before = JSON.stringify(w.nb.deadlineRows());
     const writes = w.nb.writes.length, plWrites = w.pl.writes.length;
     fs.rmSync(w.paths.records, { recursive: true, force: true });
     await w.runUntilQuiet();
     assert.equal(JSON.stringify(w.nb.deadlineRows()), before);
-    assert.deepEqual(w.nb.writes.slice(writes).filter((x) => x.table === "deadlines"), []);
+    assert.deepEqual(w.nb.writes.slice(writes), [], "no note, item or deadline written again");
     assert.equal(w.pl.writes.length, plWrites, "nothing changed in Paperless either");
   } finally { await w.close(); }
 });
