@@ -338,3 +338,16 @@ test("status says how many deadlines are in Godspeed, and when Godspeed cannot k
     assert.match(statusReport(w.paths, { env: {}, home: w.paths.root }), /This Godspeed cannot keep them yet/);
   } finally { await w.close(); }
 });
+
+test("F18, F16: killed right after a deadline to check was made, the message still names it, once", async () => {
+  const w = await kitWorld({ only: ["parking-notice"] });
+  try {
+    const killed = (p) => { if (p === "after-deadline") { const e = new Error("killed at after-deadline"); e.name = "Killed"; throw e; } };
+    await assert.rejects(w.runUntilQuiet({ crash: killed }), /killed/);
+    await w.runUntilQuiet();
+    await w.run();
+    assert.equal(of(w, "parking-notice").length, 1);
+    assert.equal(w.messages.length, 1);
+    assert.ok(w.messages[0].includes(`please check them: "${w.doc("parking-notice").title}"`), w.messages[0]);
+  } finally { await w.close(); }
+});
