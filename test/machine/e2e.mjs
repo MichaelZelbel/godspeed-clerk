@@ -176,7 +176,9 @@ async function uploadKit(p, tok, slugs, first = 1) {
   let n = first;
   for (const s of slugs) {
     const r = await p.upload(tok, path.join(RENDERED, `${s}.pdf`), `Scan ${today} 16-17-${String(n++).padStart(2, "0")}.pdf`, today);
-    ids.push(typeof r.body === "string" ? r.body : r.body.task_id);
+    const id = typeof r.body === "string" ? r.body : r.body?.task_id;
+    if (r.status !== 200 || !id) throw new Error(`the upload of ${s} was refused: ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+    ids.push(id);
   }
   await p.waitTasks(tok, ids);
 }
@@ -204,7 +206,10 @@ const installLine = (m, args = "", env = {}) => inM(m, `curl -fsSL http://${HOST
 const readIn = async (m, file) => { const r = await inM(m, `cat ${file}`); return r.code === 0 ? JSON.parse(r.out) : null; };
 
 // ------------------------------------------------------------------ the test
-const A = { slugs: ["utility-invoice", "council-letter", "pay-slip", "water-invoice", "blurry-scan"] };
+// On an empty Paperless (no senders yet) the plan proposed for the kit's drive puts invoices into
+// "Invoices" itself, letters into "Letters", pay slips into "Payslips/<year>"; the person says yes.
+const A = { slugs: ["utility-invoice", "council-letter", "pay-slip", "water-invoice", "blurry-scan"],
+  folders: { "utility-invoice": "Invoices", "council-letter": "Letters", "pay-slip": "Payslips/2025", "water-invoice": "Invoices" } };
 
 async function partA() {
   section("A: a fresh server, the install line with all defaults (F1)");
@@ -244,13 +249,15 @@ async function partA() {
   await clerk("a", 'drive folder "Paperwork"', env);
   const prop = await clerk("a", "plan propose", env);
   note(prop.out.split("\n").slice(0, 8).join(" | "));
+  check(/"Invoice" papers go to Invoices\./.test(prop.out) && /"Letter" papers go to Letters\./.test(prop.out) && /"Pay slip" papers go to Payslips\/<year>\./.test(prop.out), "the plan proposed from the drive's folders");
   const conf = await clerk("a", "plan confirm", env);
   check(conf.code === 0, "the folder plan confirmed");
   check((await clerk("a", "resume", env)).code === 0, "the Clerk resumed");
   const ph = await clerk("a", "phone", env);
   check(/Swift Paperless/.test(ph.out) && ph.out.includes(login.password) && ph.out.includes("https://srv-a.clerk.test:48444") && /second factor/.test(ph.out), "F2: the address, the login and the second factor, for the chat");
-  const p2 = await p.signIn(login.user, login.password, login.secret);
-  await uploadKit(p, p2.body.token, A.slugs);
+  // The phone signed in once (above) and keeps its key; a second sign-in in the same 30 seconds
+  // would reuse the one-time code, which Paperless refuses.
+  await uploadKit(p, A.tok, A.slugs);
   note(`${A.slugs.length} made-up scans uploaded over HTTPS the way the phone app does`);
   const docs = await p.all(A.tok, "/api/documents/?page_size=100&fields=id,title,original_file_name,correspondent,document_type,created,tags");
   A.ids = Object.fromEntries(A.slugs.map((s, i) => [s, docs.find((d) => d.original_file_name === `Scan ${today} 16-17-${String(i + 1).padStart(2, "0")}.pdf`)?.id]));
@@ -263,8 +270,9 @@ async function partA() {
     const d = (await p.req("GET", `/api/documents/${A.ids[s]}/`, { headers: { Authorization: `Token ${A.tok}` } })).body;
     const f = markedFiles(S.drives.main).filter((x) => x.appProperties.clerkDoc === String(A.ids[s]));
     const where = f.map((x) => S.drives.main.pathOf(x.id).split("/").slice(1, -1).join("/"));
+    // The folder by the plan as proposed on this Paperless and confirmed as it was (A.folders).
     if (e.check) check(f.length === 1 && where[0] === "To sort", `${s}: waits in To sort (${where})`);
-    else check(f.length === 1 && corr[d.correspondent] === e.correspondent && typ[d.document_type] === e.document_type && d.created === e.created && where[0] === e.folder, `${s}: ${corr[d.correspondent]}, ${typ[d.document_type]}, ${d.created}, filed in ${where[0]}`);
+    else check(f.length === 1 && corr[d.correspondent] === e.correspondent && typ[d.document_type] === e.document_type && d.created === e.created && where[0] === A.folders[s], `${s}: ${corr[d.correspondent]}, ${typ[d.document_type]}, ${d.created}, filed in ${where[0]} (the plan: ${A.folders[s]})`);
   }
   const notes = await waitFor("the notes", async () => { const n = await S.notes(); return A.slugs.every((s) => n.some((x) => x.clerk_doc === A.ids[s])) ? n : null; }, { minutes: 4 });
   check(!!notes, `the notes are in the notebook (${notes?.length})`);

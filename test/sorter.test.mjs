@@ -129,6 +129,18 @@ test("the date printed on the letter replaces the upload day, never a date someo
   try { assert.equal((await sort(env, answer({ created: null }))).doc.created, "2026-10-22"); } finally { await env.fake.close(); }
 });
 
+test("a phone in another time zone than Paperless, or a scan read just after midnight: its date, a day off the upload day, is the upload day too", async () => {
+  // Paperless added it at 23:30 on the 22nd (its time zone); the phone, two hours ahead, put the 23rd.
+  let env = await setup({ created: "2026-10-23", added: "2026-10-22T23:30:00+00:00" });
+  try { assert.equal((await sort(env, answer())).doc.created, "2025-03-04"); } finally { await env.fake.close(); }
+  // Scanned at 23:59 on the 21st, read by Paperless at 00:02 on the 22nd.
+  env = await setup({ created: "2026-10-21", added: "2026-10-22T00:02:00+02:00" });
+  try { assert.equal((await sort(env, answer())).doc.created, "2025-03-04"); } finally { await env.fake.close(); }
+  // Two days off is a date someone set: it stays.
+  env = await setup({ created: "2026-10-20", added: "2026-10-22T09:00:00+02:00" });
+  try { assert.equal((await sort(env, answer())).doc.created, "2026-10-20"); } finally { await env.fake.close(); }
+});
+
 test("senders: the same one is reused under a longer name, a new one is made to learn from", async () => {
   let env = await setup();
   try {
