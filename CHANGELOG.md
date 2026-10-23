@@ -1,5 +1,24 @@
 # Changes
 
+## 0.3.1 (batch 2b: sort in Paperless, and the drive follows)
+
+- A paper the Clerk cannot place is sorted in Paperless: with the person's yes, Paperless's storage
+  path list holds their drive folders (one per folder of the plan, named like the folder, its
+  template mirroring the drive, Auto matching; "To sort" never matched), and a saved view "To sort"
+  (in the sidebar, on the dashboard, small cards with each first page) lists exactly the papers
+  waiting. Picking a storage path moves the drive file at the next run, takes "Check this" off and
+  keeps the folder for that paper's sender; a path the person makes becomes a folder inside the
+  documents folder; picking a sender files a waiting paper too. When Godspeed sorts, the Clerk sets
+  every paper's storage path itself, the papers filed before once. Asked first when Paperless has
+  storage paths of its own; "no" leaves them alone.
+- The message for papers to sort is one line, "N papers are waiting to be sorted.", with one link
+  to the To sort page.
+- F7 judged field by field: a sender the AI is sure of, with a folder of its own or a Paperless
+  sender of that name, is used even when the type, the tags or the title are unclear.
+- `plan mirror`, `plan to-sort "<name>"` (renames To sort by its id), `settings reset <name>`.
+- Fixed: the run's "to check" count no longer counts a paper the person resolved by hand; a plan
+  that goes on below the sender (`Travel/{sender}/{year}`) no longer adds a second year folder.
+
 ## 0.3.0 (third batch, private trial)
 
 - Deadlines from letters (F15): each request with a date becomes a Godspeed deadline, which

@@ -12,6 +12,7 @@ the date printed on it, and it sits in the folder you would have put it in yours
 **Status: version 0.3, the third batch.** It works with a Paperless you already run, Godspeed
 knows your papers (every document gets a note in your notebook and an item in a "Documents"
 collection), a letter's deadline becomes a Godspeed deadline, and you hear about what needs you.
+A paper it cannot place you sort in Paperless itself, on its "To sort" page, and your drive follows.
 Installing Paperless for you and the nightly restore copy come in the next versions. The requirements it is built and tested against are in the Godspeed
 repository: `docs/proposals/paperless-addon.md`.
 
@@ -23,6 +24,9 @@ repository: `docs/proposals/paperless-addon.md`.
   - A title you typed stays. A date you set stays. A sender or type already there stays.
   - Tags are only ever added. "Tax 2024" means "needed for the 2024 tax return".
   - When it is not sure, the document gets the tag "Check this" and waits for you in "To sort".
+    Being unsure is judged field by field: a sender it is sure of, with a folder of its own (or a
+    sender of that name in Paperless), is used even when the type or the tags are unclear; only
+    those are left for you.
 - **Files**: every document gets a checked copy in "To sort" first, sorted or not, and is then
   renamed and moved into its folder according to your folder plan. Two papers with the same date
   and title become `name.pdf` and `name (2).pdf`; nothing is ever overwritten.
@@ -67,12 +71,24 @@ repository: `docs/proposals/paperless-addon.md`.
   - When Godspeed sorts, the letter gets the tag "Important" until the day has passed.
   - Papers noted by an earlier version get their deadlines read once, a few at a time, without
     being sorted or filed again.
-- **Tells you only what needs you**: a paper it could not place, a deadline whose date needs a
+- **You sort in Paperless, and the drive follows**: Paperless's "storage path" list holds your own
+  drive folders (one per folder of your plan, named like the folder, its file layout in Paperless
+  mirroring the drive), and a "To sort" page (a saved view, in the sidebar, on the dashboard and in
+  the phone app) shows exactly the papers waiting for you, each with a picture of its first page.
+  Pick a storage path for a paper, and at its next run the Clerk moves the file into that folder,
+  takes "Check this" off, and keeps the folder for that paper's sender, so the next paper from them
+  goes there by itself. Paperless learns from your picks too (its own matching). A storage path you
+  make yourself becomes a folder of that name inside your documents folder. Picking a sender files
+  a waiting paper as well. When Godspeed sorts, the Clerk sets each paper's storage path itself, so
+  Paperless and your drive always agree. If your Paperless already has storage paths of its own,
+  you are asked first; with your "no" they stay as they are.
+- **Tells you only what needs you**: papers waiting to be sorted, a deadline whose date needs a
   check, a letter with no date to count a period from, Google Drive no longer letting
   it file, a document deleted in Paperless, the notebook silent for hours. One short message per
-  run at most, with one link, never twice about the same thing; nothing otherwise. On a server it
-  comes through your assistant's own Telegram bot, on a computer as a notification. While a big
-  pile is being sorted, the papers to check come together when it is done.
+  run at most, with one link, never twice about the same thing; nothing otherwise. Papers to sort
+  are one line, "2 papers are waiting to be sorted.", and the link opens the "To sort" page. On a
+  server it comes through your assistant's own Telegram bot, on a computer as a notification.
+  While a big pile is being sorted, the papers to sort come together when it is done.
 - **Picks up where it stopped**: a crash, a reboot or a lost connection at any step never leaves a
   second file or a half upload.
 
@@ -93,6 +109,9 @@ the code: there is no way for it to send a change.
   it never asks Paperless for a new one (that would sign your phone app out). It never deletes
   anything. It may create senders, "Tax <year>" tags and the "Check this" and "Important" tags,
   nothing else. "Important" it takes off again only when it put it on and the day has passed.
+  With your yes it also keeps the storage paths that mirror your plan and the "To sort" page, and
+  changes only those it made, in every sorting setting; with "Paperless sorts" and "nobody sorts"
+  that is all it ever writes, never anything of a document.
 - **Google Drive**: Google is asked for access to your whole drive, because that is the only
   permission that can file into folders you already have. The Clerk itself reads and writes only
   inside the documents folder you name (and, from a later version, a folder of its own), renames
@@ -120,16 +139,19 @@ godspeed-clerk drive connect --client-file client_secret.json            # print
 godspeed-clerk drive finish "<the address your browser showed after Allow>"
 godspeed-clerk drive folder "Paperwork"                                   # your documents folder
 godspeed-clerk plan propose                                               # the folder plan, in plain words
-godspeed-clerk plan confirm
+godspeed-clerk plan confirm                                               # also: the storage paths and the "To sort" page
 godspeed-clerk resume
 ```
 
 `godspeed-clerk status` says where everything stands at any time, including how far a big pile is
 ("212 of 640 sorted, 180 of 640 noted"), whether the notebook answers, and where messages go.
 
-**In your language.** Titles, tag names and the "To sort" folder follow your settings already. The
-words in notes and messages are settings too (`texts`), so the assistant sets them once in your
-language, for example `godspeed-clerk settings texts.kept_out_title "Dokument nicht im Notizbuch"`.
+**In your language.** Folder names and messages are in the language you talk to Godspeed in, not the
+language of your papers. The words in notes and messages are settings (`texts`), so the assistant
+sets them once in your language, for example `godspeed-clerk settings texts.kept_out_title
+"Dokument nicht im Notizbuch"`; `godspeed-clerk settings reset texts` brings back the English ones.
+`godspeed-clerk plan to-sort "To sort"` renames the To sort folder in your drive (its papers stay in
+it), and its storage path and page follow. Titles and tag names follow your settings.
 Messages go to `talk`: `["telegram"]` (your assistant's own bot; found by itself, or named with
 `telegram_env`) or `["desktop"]`; unset, a server uses Telegram and a computer its notifications.
 
@@ -142,10 +164,12 @@ Messages go to `talk`: `["telegram"]` (your assistant's own bot; found by itself
 | `ai`, `ai approve` | Shows, or approves, the AI that reads your documents. |
 | `drive connect`, `drive finish`, `drive folder`, `drive status`, `drive disconnect` | The Google Drive connection. |
 | `plan propose`, `plan show`, `plan confirm`, `plan set <file>` | The folder plan. |
+| `plan mirror [--storage-paths yes\|no]` | Paperless's storage paths and the "To sort" page, for a plan confirmed before; or your yes or no to them. |
+| `plan to-sort "<name>"` | Renames the To sort folder in your drive; its papers stay in it. |
 | `run` | One run now: first copies, sorting, filing, notes, the message. |
 | `status` | Everything at a glance. |
 | `pause`, `resume` | Stop and start the work. |
-| `settings [<name> <value>]` | Show or change a setting. |
+| `settings [<name> <value>]`, `settings reset <name>` | Show or change a setting, or take it back to its default. |
 | `uninstall` | Removes the program and the service; keeps your records and every file. |
 
 ## Tests

@@ -41,7 +41,10 @@ Everything is in one folder, readable by you only (files 600, folders 700): as r
 - `settings.json`: your choices, the words of notes and messages in your language, and the facts
   from your profile that help sorting (`about`).
 - `paperless.json`, `drive.json`: the two connections. They hold keys; keep them private.
-- `plan.json`: the folder plan.
+- `plan.json`: the folder plan, with the senders whose papers you put into a folder by picking a
+  storage path ("papers from <sender> go to <folder>"): sender names, folder names and ids.
+- `mirror.json`: which Paperless storage path stands for which folder (numbers and folder ids), and
+  the "To sort" page's number.
 - `drive-tree.json`: the names of the folders inside your documents folder, kept between runs.
 - `records/<number>.json`: one per document. Numbers, the mark, folder ids, a hash of the file
   name, the note's id and hashes, times, and a letter's deadline days. Never a document's text,

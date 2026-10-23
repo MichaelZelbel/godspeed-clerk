@@ -18,7 +18,9 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `documents.mjs` | The "Documents" collection: one item per document. |
 | `deadlines.mjs` | A letter's requests: what the AI read, checked; the dates counted (never by the AI). |
 | `deadline-step.mjs` | The deadlines in Godspeed: made once per request, the person's once touched, "Important". |
-| `notify.mjs` | One message per run for what the person can act on. |
+| `notify.mjs` | One message per run for what the person can act on; papers to sort are one line with the To sort page's link. |
+| `mirror.mjs` | Paperless's storage paths that mirror the folder plan, and the "To sort" saved view (F19). |
+| `learn.mjs` | A sender's folder kept from the person's pick, in the plan or as the sender folder's link. |
 | `run.mjs` | One run: the steps over all documents, in batches and within a time limit. |
 | `records.mjs` | One record per document, the log, the outbox. |
 | `../channels/` | Where messages go: the assistant's own Telegram bot, this computer's notifications. |
@@ -27,8 +29,9 @@ file each, found by the registry). The work lives in `lib/core/`:
 
 ## One run
 
-1. Read the account (`ui_settings/`), the tags, senders and types, and the list of documents the
-   account owns (light fields only, oldest first).
+1. Read the account (`ui_settings/`), the tags, senders, types and storage paths, and the list of
+   documents the account owns (light fields only, oldest first). With the person's yes, keep
+   Paperless's storage paths and the "To sort" page level with the folder plan (F19).
 2. First copies: each document without one gets the searchable PDF uploaded into "To sort" as
    `<upload day> <title>.pdf`, with the mark, and the size and checksum Google reports are compared
    with Paperless's own. Up to `copy_batch` per run.
@@ -36,7 +39,10 @@ file each, found by the registry). The work lives in `lib/core/`:
    copy is read by the AI and sorted. Up to `batch_size` per run.
 4. Filing: each document that is sorted (or, when Paperless or nobody sorts, no longer in the inbox
    or older than `settle_minutes`) is renamed to `<date> <title>.pdf` and moved into the folder the
-   plan gives it. A document that changed in Paperless since it was filed is filed again.
+   plan gives it, or into the folder its storage path stands for when the person (or Paperless's
+   matching) picked one. A document that changed in Paperless since it was filed is filed again.
+   When Godspeed sorts, each paper then carries its folder's storage path ("To sort" while it
+   waits).
 5. Documents gone from Paperless: their files stay; the person hears it once.
 6. Notes and the collection, for every document that is filed: its note, then its item, at most
    `note_batch` (50) per run. A note is written again only when what it is made from changed.
@@ -46,9 +52,9 @@ file each, found by the registry). The work lives in `lib/core/`:
    product's add-on deadlines (`POST /api/functions/addon-deadlines` on the same door), listed
    once per run. A step that changed the paper in Paperless ("Important", "Check this") is
    followed by its note and item once more, so they say it in the same run.
-7. One message for what the person can act on: what is new in the outbox, no longer true or
-   already said dropped, one link. While a pile still waits to be sorted, papers to check are held
-   (at most a day) so they come together.
+7. One message for what the person can act on: the papers newly waiting to be sorted (counted, with
+   the To sort page's link), what is new in the outbox, no longer true or already said dropped, one
+   link. While a pile still waits to be sorted, they are held (at most a day) so they come together.
 
 The worker does one run every `interval_minutes` (3), and a run starts no new document after
 `run_minutes` (5), so a new scan has its first copy within about ten minutes.
@@ -199,3 +205,42 @@ never counts a date: `deadlines.mjs` does.
   it off or had set it themselves.
 - Papers noted before deadlines were read get one reading each, in the notes' batches; the
   archive (sorted before the Clerk came) none.
+
+## Sorting in Paperless (F19)
+
+A paper the Clerk cannot place is sorted where Paperless is built for it. With the person's yes
+(setting `storage_paths`; `plan confirm` decides it: yes when Paperless has no storage paths of its
+own, else the person is asked; `plan mirror` does it for a plan confirmed before), `mirror.mjs`
+keeps one Paperless storage path per place a paper can go into: every fixed folder of the plan,
+every sender folder where the plan keeps one folder per sender (named like the folder; its path
+below the documents folder when that name is taken), the folder before a `{year}` or `{type}` (the
+rest of the pattern in the template), and "To sort". Each template mirrors the drive folder,
+`<documents folder>/<path>/{{ created }} {{ title }}` (To sort: `{{ added }}`), so Paperless's own
+files and the drive look alike. Each is set to Auto, so Paperless's classifier learns from the
+person's picks; To sort is None, so Paperless never learns to put a paper there. A saved view "To
+sort" (one rule: storage path is To sort; small cards, so each paper shows its first page) is
+written with API 9, which puts `show_in_sidebar` and `show_on_dashboard` into the person's own UI
+settings. Every run keeps them level: a folder the Clerk makes gets its path, a renamed or moved
+folder's path gets its new name and template. Only the paths and the view the Clerk made are ever
+changed (`mirror.json` says which, by number); nothing is deleted; a path the person deleted is not
+made again; with the records lost, the Clerk's paths are found again by their templates and the
+view by its name and rule. With "Paperless sorts" and "nobody sorts" these are the only writes, and
+only with the yes.
+
+When Godspeed sorts, a paper to check gets the To sort path in the same update that sorted it, so it
+is on the page at once, and every paper the Clerk files gets its folder's path (a paper in a
+subfolder, the nearest path above it); the papers filed before get theirs once. The record keeps the
+path the Clerk last saw or set (`sp`): a storage path different from it was picked in Paperless, by
+the person or Paperless's matching, and is followed in every setting: the file moves into that
+path's folder, "Check this" comes off (when Godspeed sorts), and the paper's sender is kept for that
+folder (`learn.mjs`: the sender's own same-named folder's link, else a rule `{ sender, folder,
+folder_id }` at the top of the plan). A paper without a sender gets one AI look at who sent it; the
+sender is set and learned only when the AI is sure, and never named after the folder. A storage path
+the Clerk did not make becomes a folder of its name inside the documents folder (where the plan keeps
+sender folders, else at its top). Picking a sender (also with "no") files a waiting paper by the
+plan and takes "Check this" off; a sender whose folder is learned files that sender's waiting
+papers, never another sender's. Set back to To sort, a paper waits there again.
+
+The message counts the papers waiting to be sorted (to check, not filed elsewhere): one line with
+the To sort page's link (without the page, Paperless's list of the papers with Check this), said
+once for every wait (keyed by the paper's sorting).

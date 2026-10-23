@@ -14,8 +14,14 @@ returned Google access), F10 (one note per document with its full text and links
 line kept through a rename), F11 (the letter uploaded with "Not in notebook" has no note; the tag
 added later trashes a note or leaves only the person's line), F12 (the letter that tries to
 instruct the AI), F14 (no sentence, title or summary in the logs, records or temporary files),
-F16 (one message for the kit naming the blurry scan, none for a run with nothing new, one for a
-deletion, one for lost access; one link each), F17 (one item per document, a kept-out item without
+F16 (one message for the kit counting the papers to sort with the To sort page's link and naming
+the letters whose deadlines need a check, none for a run with nothing new, one for a deletion, one
+for lost access; one link each), F19 (with "no", storage paths and saved views unchanged; with the
+yes, one storage path per plan folder mirroring the drive and Auto matching except To sort, every
+filed paper carrying its folder's path, the "To sort" view in the sidebar and on the dashboard
+listing exactly the papers waiting; a storage path picked through Paperless's API moves the file,
+takes Check this off and takes the paper off the page; a storage path the person makes becomes a
+folder inside the documents folder), F17 (one item per document, a kept-out item without
 a title) and F18 (a real kill after each step, notes, items and deadlines included, and in the
 middle of an upload; the records deleted).
 
