@@ -51,8 +51,10 @@ repository: `docs/proposals/paperless-addon.md`.
   in Godspeed, which reminds you as the day comes, the way it reminds you of any deadline; the
   Clerk sends no reminders of its own. Each request with a date is its own deadline, named by
   what it asks, with a link to the document.
-  - A date written in the letter is taken as written. A period ("within one month of this
-    notice") is counted from the day the letter prints. When it runs from a day the letter does
+  - A date written in the letter is taken as written; one written without a year is the next
+    such day after the letter's date. A period ("within one month of this notice") is counted
+    from the day the letter prints; one before a date ("at the latest six weeks before the lease
+    ends on 31 December") is counted back from it. When it runs from a day the letter does
     not print (the day it reached you), the Clerk counts from the letter's own date, the earliest
     the day can be, and asks you to check the date. The upload day is never counted from.
   - A period with no date on the letter to count from: no deadline; the letter is to check and you

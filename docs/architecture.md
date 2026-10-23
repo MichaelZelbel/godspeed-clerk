@@ -170,7 +170,11 @@ or a period and what it counts from (the document's date, another printed date, 
 never counts a date: `deadlines.mjs` does.
 
 - The day a period counts from is Paperless's date, unless that is the upload day nobody read
-  off the letter; then the date the AI read; else none. A period from receipt (or any day the
+  off the letter or set since the Clerk first saw the paper; then the date the AI read; else none.
+  A period before a printed date ("at the latest six weeks before the lease ends") counts back
+  from it. A date written without a year is the next such day on or after the letter's date. A
+  time limit the AI saw but could not give (no date, no period, not vague) is asked for, like a
+  period with no date to count from. A period from receipt (or any day the
   letter does not print) counts from the letter's date, the earliest the day can be, marked
   "check the date". No date to count from: no deadline, "Check this" and a message asking for it.
 - Months end on the same day number, or the month's last day (31 January plus a month is the end
@@ -183,7 +187,11 @@ never counts a date: `deadlines.mjs` does.
 - Godspeed says whether the person touched a deadline (changed its name or a date, closed or
   dropped it). Such a deadline is never moved or renamed by the Clerk again. A corrected letter
   date moves an untouched one counted from it; a "Not in notebook" tag added later renames an
-  untouched one to the document's title and date.
+  untouched one to the document's title and date (never a scan's file name, then "Letter", and
+  never the upload day, then the letter's date), and it follows them when they change.
+- The first reading stays the reading: once a note's header holds the requests, a letter read
+  again changes nothing, so each deadline stays on its own request whatever order a new answer
+  gives them in.
 - "Important" (when Godspeed sorts) while one of the paper's deadlines, as Godspeed has it now, is
   today or later; taken off after only when the Clerk put it on; never again once the person took
   it off or had set it themselves.

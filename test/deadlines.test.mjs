@@ -33,14 +33,14 @@ test("requests the AI got wrong are dropped, never guessed", () => {
     { ask: "Reply", within: { amount: 0, unit: "days" } },           // no period
     { ask: "Reply", within: { amount: 3, unit: "fortnights" } },     // a unit nobody counts in
     { ask: "Return the signed form", vague: true },
-    { ask: "Call back" },                                            // no date and no period: vague
+    { ask: "Call back" },                                            // no date, no period, not said vague: to ask about
     "pay something",
   ]);
   assert.deepEqual(got.map((r) => [r.n, r.ask, r.by, r.within, r.from, r.vague]), [
     [1, "Pay the invoice", "2026-11-20", null, null, false],
     [2, "Object to the notice", null, { n: 1, unit: "months" }, "receipt", false],
     [3, "Return the signed form", null, null, null, true],
-    [4, "Call back", null, null, null, true],
+    [4, "Call back", null, null, null, false],
   ]);
   assert.deepEqual(cleanRequests("none"), []);
   assert.equal(cleanRequests(Array.from({ length: 20 }, (_, i) => ({ ask: `Request ${i}`, vague: true }))).length, 8);
@@ -136,4 +136,48 @@ test("the note's reading asks for the letter's date and its requests", () => {
   assert.equal(v.requests[0].from, "receipt");
   assert.equal(validateSummary(JSON.stringify({ summary: "x", key_facts: [], created: "2027-01-01" }), TODAY).created, null, "a date after today is no letter's date");
   assert.deepEqual(validateSummary(JSON.stringify({ summary: "", key_facts: [], created: null, requests: [] }), TODAY), { summary: null, facts: [], created: null, requests: [] }, "read, with nothing in it");
+});
+
+// The independent review (23 October 2026): three ways a real date came out late or not at all.
+test("a period before a printed date counts back from it, never forward", () => {
+  const [a, b, c, d] = plan(reqs(
+    { within: { amount: 6, unit: "weeks" }, counted_from: "before", from_date: "2026-12-31" },
+    { within: { amount: 3, unit: "months" }, counted_from: "before", from_date: "2027-03-31" },
+    { within: { amount: 1, unit: "months" }, counted_from: "before", from_date: "2027-03-31" },
+    { within: { amount: 3, unit: "months" }, counted_from: "before" },
+  ), "2026-10-09", TODAY);
+  assert.deepEqual([a.kind, a.due, a.basis, a.check], ["period", "2026-11-19", "fixed", false], "six weeks before 31 December");
+  assert.deepEqual([b.due, c.due], ["2026-12-31", "2027-02-28"], "three months, and one month to the shorter month's end");
+  assert.equal(d.kind, "nodate", "before a day the letter does not print: asked for, never counted from the letter");
+  assert.deepEqual(cleanRequests([{ ask: "Cancel", within: { amount: 3, unit: "months" }, counted_from: "before", from_date: "2027-03-31" }])[0].from, "before");
+});
+
+test("a date written without a year is the next one on or after the letter's date", () => {
+  const [a, b] = plan(reqs({ by: "2026-01-15", no_year: true }, { by: "2027-12-03", no_year: true }), "2026-10-21", TODAY);
+  assert.deepEqual([a.kind, a.due, a.passed], ["date", "2027-01-15", false]);
+  assert.equal(b.due, "2026-12-03");
+  const [c] = plan(reqs({ by: "2026-10-21", no_year: true }), "2026-10-21", TODAY);
+  assert.equal(c.due, "2026-10-21", "the letter's own day is on or after it");
+  const [d] = plan(reqs({ by: "2026-11-30", no_year: true }), null, TODAY);
+  assert.equal(d.due, "2026-11-30", "no letter date: the next one from today");
+  const [e] = plan(reqs({ by: "2028-02-29", no_year: true }), "2026-10-21", TODAY);
+  assert.equal(e.kind, "nodate", "29 February without a year: asked for");
+});
+
+test("a request with a time limit the AI could not give is asked for, never silently vague", () => {
+  const got = cleanRequests([{ ask: "Confirm the new plan", by: null, within: null, vague: false }, { ask: "Reply promptly", vague: true }, { ask: "Send the form" }]);
+  assert.deepEqual(got.map((r) => r.vague), [false, true, false]);
+  assert.deepEqual(plan(got, "2026-10-16", TODAY).map((i) => i.kind), ["nodate", "vague", "nodate"]);
+});
+
+test("a letter date the person corrected counts, also when it is the day it was scanned", () => {
+  assert.equal(letterDate({ date: "2026-10-23", uploadDay: "2026-10-23", dateRead: false, readCreated: "2026-10-19", corrected: true }), "2026-10-23");
+  assert.equal(letterDate({ date: "2026-10-23", uploadDay: "2026-10-23", dateRead: false, readCreated: "2026-10-19", corrected: false }), "2026-10-19");
+});
+
+test("the note's reading knows today, for dates written without a year", () => {
+  const { prompt, system } = summaryRequest({ content: "A made-up letter" }, DEFAULTS, TODAY);
+  assert.match(prompt, /Today is 2026-10-22./);
+  assert.match(system, /"no_year"/);
+  assert.match(system, /"before"/);
 });

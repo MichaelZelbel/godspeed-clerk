@@ -354,3 +354,64 @@ test("F18, F16: killed right after a deadline to check was made, the message sti
     assert.ok(w.messages[0].includes(`please check them: "${w.doc("parking-notice").title}"`), w.messages[0]);
   } finally { await w.close(); }
 });
+
+// The independent review (23 October 2026).
+test("a letter date the person sets to the day it was scanned counts, and moves an untouched deadline", async () => {
+  const w = await kitWorld({ only: ["parking-notice"] });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(of(w, "parking-notice")[0].due, "2026-11-09");
+    change(w, "parking-notice", { created: "2026-10-22" }); // the kit's upload day
+    await w.runUntilQuiet();
+    assert.equal(of(w, "parking-notice")[0].due, "2026-11-22");
+  } finally { await w.close(); }
+});
+
+test("F11: a kept-out letter nobody sorted is named by its letter's date, and renamed once it has a title", async () => {
+  const w = await kitWorld({ sorting: "nobody", only: ["clinic-letter"] });
+  try {
+    fs.writeFileSync(w.paths.state, JSON.stringify({ started_at: "2026-10-22T00:00:00Z" }));
+    await w.runUntilQuiet();
+    const [d] = of(w, "clinic-letter");
+    assert.equal(d.title, "Letter, 2026-10-14", "never the scan's file name or the upload day");
+    change(w, "clinic-letter", { title: "Appointment reminder from the practice", created: "2026-10-14" });
+    await w.runUntilQuiet();
+    assert.equal(of(w, "clinic-letter")[0].title, "Appointment reminder from the practice, 2026-10-14");
+    w.nb.personRenames(d.key, "Book the blood test");
+    change(w, "clinic-letter", { title: "Practice letter" });
+    await w.runUntilQuiet();
+    assert.equal(of(w, "clinic-letter")[0].title, "Book the blood test", "renamed by the person: theirs");
+  } finally { await w.close(); }
+});
+
+test("F11 and F18: with the records lost, the tag added later still renames an untouched deadline", async () => {
+  const w = await kitWorld({ only: ["water-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    const keep = [...w.pl.state.tags.values()].find((t) => t.name === "Not in notebook").id;
+    change(w, "water-invoice", { tags: [...w.doc("water-invoice").tags, keep] });
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "water-invoice").map((d) => d.title), ["Electricity invoice September 2026, 2026-10-12"]);
+  } finally { await w.close(); }
+});
+
+test("F15 and F18: a letter read again after lost records keeps each deadline on its own request, whatever order the new answer gives", async () => {
+  const w = await kitWorld({ only: ["tax-office-letter"] });
+  try {
+    await w.runUntilQuiet();
+    const before = of(w, "tax-office-letter").map((d) => [d.key, d.title, d.due]).sort();
+    // The same letter, answered with its two requests the other way round.
+    const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+    const tax = answers.find((a) => (a.match || []).includes("Q-2025-0917"));
+    tax.answer.requests.reverse();
+    w.setAnswers(answers);
+    const inbox = [...w.pl.state.tags.values()].find((t) => t.name === "Inbox").id;
+    change(w, "tax-office-letter", { tags: [...w.doc("tax-office-letter").tags, inbox] });
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    await w.runUntilQuiet();
+    assert.deepEqual(of(w, "tax-office-letter").map((d) => [d.key, d.title, d.due]).sort(), before);
+    const note = w.noteOf("tax-office-letter");
+    assert.ok(note.content.indexOf("Send the donation receipts") < note.content.indexOf("Pay the Fairford Tax Office"), "the note keeps the first reading");
+  } finally { await w.close(); }
+});
