@@ -360,9 +360,14 @@ async function main() {
       check(Object.entries(upgrade.files).every(([s, where]) => fake.pathOf(oneFile(fake, s)[0]?.id || "") === where), "every paper filed by the earlier version is where it was, under its name");
       const dl = await NB.deadlines();
       check(dl.length === wantDeadlines(ALEX.filter((s) => s !== "unusable-answer")), `each letter's deadlines were made, once (${dl.length})`);
-      const readings = promptLog().filter((p) => p.system.startsWith("You summarise")).length - upgrade.readings;
-      const sortedBefore = ALEX.filter((s) => !HELD_BACK.includes(s) && !DOCS.find((d) => d.slug === s).presorted && !expected(s).check).length;
-      check(readings === sortedBefore, `each paper the earlier version sorted was read once for its deadlines (${readings} of ${sortedBefore})`);
+      // Which paper a reading was about: the strings its recorded answer is matched by.
+      const squash = (t) => String(t).toLowerCase().replace(/\s+/g, " ");
+      const kitAnswers = JSON.parse(fs.readFileSync(path.join(KITDIR, "answers.json"), "utf8"));
+      const markerOf = (slug) => (kitAnswers.find((a) => (a.match || []).length && a.match.every((m) => squash(kitText(slug)).includes(squash(m)))) || {}).match || [];
+      const readings = promptLog().filter((p) => p.system.startsWith("You summarise")).slice(upgrade.readings);
+      const sortedBefore = ALEX.filter((s) => !HELD_BACK.includes(s) && !DOCS.find((d) => d.slug === s).presorted && !expected(s).check);
+      const counts = sortedBefore.map((slug) => [slug, readings.filter((r) => markerOf(slug).every((m) => squash(r.prompt).includes(squash(m)))).length]);
+      check(counts.every(([, n]) => n === 1), `each paper the earlier version sorted was read once for its deadlines (${counts.filter(([, n]) => n !== 1).map(([s, n]) => `${s}: ${n}`).join(", ") || `all ${counts.length}`})`);
     }
 
     section("F5, F6, F7, F8, F12: the kit, sorted and filed");

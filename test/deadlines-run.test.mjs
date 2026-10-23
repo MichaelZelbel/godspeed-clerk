@@ -415,3 +415,66 @@ test("F15 and F18: a letter read again after lost records keeps each deadline on
     assert.ok(note.content.indexOf("Send the donation receipts") < note.content.indexOf("Pay the Fairford Tax Office"), "the note keeps the first reading");
   } finally { await w.close(); }
 });
+
+// The re-check of the independent review (23 October 2026), and what the upgrade full test showed.
+test("F18: killed right after sorting a paper from a new sender, it is filed into that sender's new folder all the same", async () => {
+  const clean = await kitWorld({ only: ["roofing-invoice"] });
+  let want;
+  try { await clean.runUntilQuiet(); want = clean.pathOf("roofing-invoice"); } finally { await clean.close(); }
+  assert.match(want, /^Paperwork\/Invoices\/Hollis Roofing\//);
+  const w = await kitWorld({ only: ["roofing-invoice"] });
+  try {
+    const killed = (p) => { if (p === "after-sort") { const e = new Error("killed at after-sort"); e.name = "Killed"; throw e; } };
+    await assert.rejects(w.run({ crash: killed }), /killed/);
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("roofing-invoice"), want);
+    assert.ok(!w.tagNames(w.doc("roofing-invoice")).includes("Check this"));
+  } finally { await w.close(); }
+});
+
+test("F18: a letter date the person set to the day it was scanned survives lost records", async () => {
+  const w = await kitWorld({ only: ["parking-notice"] });
+  try {
+    await w.runUntilQuiet();
+    change(w, "parking-notice", { created: "2026-10-22" });
+    await w.runUntilQuiet();
+    assert.equal(of(w, "parking-notice")[0].due, "2026-11-22");
+    const writes = w.nb.writes.length;
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    await w.runUntilQuiet();
+    assert.equal(of(w, "parking-notice")[0].due, "2026-11-22");
+    assert.deepEqual(w.nb.writes.slice(writes).filter((x) => x.table === "deadlines"), []);
+  } finally { await w.close(); }
+});
+
+const LEASE = { slug: "lease-letter", owner: "alex", content: "Elmstead Lettings\nMarsh Lane 2, 40212 Fairford\n\nAlex Morgan\n12 Elm Row\n40210 Fairford\n\nFairford, 18 October 2026\n\nTenancy LT-5521\n\nIf you want to end the garage tenancy, please tell us in writing at the latest four weeks before the end of the minimum term.\n\nElmstead Lettings" };
+const LEASE_ANSWER = { match: ["LT-5521"], answer: { title: "Garage tenancy notice", correspondent: "Elmstead Lettings", document_type: "Letter", tags: [], created: "2026-10-18", folder: "Letters", confident: true, summary: "Elmstead Lettings explains how to end the garage tenancy.", key_facts: ["Tenancy LT-5521"],
+  requests: [{ ask: "Tell Elmstead Lettings in writing if you want to end the garage tenancy", by: null, within: { amount: 4, unit: "weeks" }, counted_from: "before", from_date: null, vague: false }] } };
+
+test("F15, F16: a time limit before a day the letter does not print is asked about in its own words, not by asking for the letter's date", async () => {
+  const answers = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "kit", "answers.json"), "utf8"));
+  const w = await kitWorld({ only: [], extra: [LEASE], answers: [LEASE_ANSWER, ...answers] });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.nb.deadlineRows().length, 0);
+    assert.ok(w.tagNames(w.doc("lease-letter")).includes("Check this"));
+    assert.equal(w.messages.length, 1);
+    assert.ok(!/Set the letter's date/.test(w.messages[0]), w.messages[0]);
+    assert.ok(w.messages[0].includes(`A time limit the Clerk could not read; please look at the letter and tell your assistant its day: "${w.doc("lease-letter").title}"`), w.messages[0]);
+    assert.ok(w.noteOf("lease-letter").content.includes("Tell Elmstead Lettings in writing if you want to end the garage tenancy: the letter sets a time limit the Clerk could not read"));
+    const item = w.nb.rows("collection_items")[0];
+    assert.equal(item.data.deadlines, "time limit not readable");
+  } finally { await w.close(); }
+});
+
+test("F11 and F18: under nobody sorts, a kept-out deadline keeps its name when the records are lost", async () => {
+  const w = await kitWorld({ sorting: "nobody", only: ["clinic-letter"] });
+  try {
+    fs.writeFileSync(w.paths.state, JSON.stringify({ started_at: "2026-10-22T00:00:00Z" }));
+    await w.runUntilQuiet();
+    assert.equal(of(w, "clinic-letter")[0].title, "Letter, 2026-10-14");
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    await w.runUntilQuiet();
+    assert.equal(of(w, "clinic-letter")[0].title, "Letter, 2026-10-14", "never renamed after the upload day");
+  } finally { await w.close(); }
+});

@@ -181,3 +181,7 @@ test("the note's reading knows today, for dates written without a year", () => {
   assert.match(system, /"no_year"/);
   assert.match(system, /"before"/);
 });
+
+test("the requests' words name a right to object or challenge within a period as a request", () => {
+  assert.match(requestsRule(DEFAULTS), /right to object, appeal or challenge/);
+});

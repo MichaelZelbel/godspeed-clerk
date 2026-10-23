@@ -60,7 +60,9 @@ before it writes anywhere else, and records the result after. A step killed betw
 write and its record is completed by the next run from what it finds:
 
 - first copy: the file with the document's mark is found in the drive and checked;
-- sorting: the document no longer carries the inbox tag, so it is not sorted again;
+- sorting: the document no longer carries the inbox tag, so it is not sorted again, and the
+  decision the intent recorded right before Paperless was changed (folder, sender folder, the
+  date read) is kept;
 - filing: the file is already where the intent said.
 
 A file that is neither where the Clerk last put it nor where its intent said was moved or renamed

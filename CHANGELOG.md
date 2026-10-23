@@ -10,7 +10,10 @@
   facts. Each made once; once the person changed or closed one, never changed again; a corrected
   letter date moves an untouched one. "Important" while a day is ahead, when Godspeed sorts.
   A period before a printed date counts back from it; a date without a year is the next one after
-  the letter's date; a time limit the AI could not read is asked for, never filed as vague.
+  the letter's date; a time limit the AI could not read is asked for in its own words, never
+  filed as vague.
+- A paper sorted just before a crash is filed as if the run had not stopped: the sorting decision
+  (a new sender's new folder too) is recorded before Paperless is changed (F18).
 - A "Not in notebook" letter's deadline is named only by its title and date.
 - The note shows its deadlines; the item's Deadlines column shows each day; the one message per
   run names deadlines to check and letters with no date to count from.
