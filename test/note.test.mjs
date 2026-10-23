@@ -71,5 +71,7 @@ test("field values stay on one line and cannot make headings or links", () => {
   const s = splitNote(composeNote(p, "Mine."), [texts.yours]);
   assert.equal(s.user.trim(), "Mine.");
   assert.ok(!/\n#{1,6} Heading/.test(p));
-  assert.ok(!p.includes("](https://evil.example)"));
+  assert.ok(!p.includes("[x]("), "no link can be made");
+  // Parentheses and other plain punctuation stay as they are, for the person and the assistant.
+  assert.ok(part({ summary: "Total (incl. VAT) 12.00 EUR, due 1.5.2026." }).includes("Total (incl. VAT) 12.00 EUR, due 1.5.2026."));
 });
