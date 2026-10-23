@@ -45,3 +45,19 @@
 - A certificate from Let's Encrypt itself on a public name: the test certificates come from Pebble, Let's Encrypt's own test server, over the same ACME steps, on names only the test network knows.
 - The download from GitHub while the repository is private: the machines get the same tarball from a test server (`GODSPEED_CLERK_TARBALL`).
 - A real iPhone: F2's phone check is a person's step before release.
+
+## How it went (23 and 24 October 2026)
+
+- The test VPS named in the secrets store (srv1069233) was gone (its plan expired on 16 October), so
+  the fresh machines are containers with systemd and their own Docker in a WSL VM made for this
+  batch, on a USB SSD (the laptop's own disk had 8 GB free). Pebble gives real ACME certificates on
+  the test network.
+- What the machines found that the fast tests could not: Docker 29's image store cannot unpack
+  layers inside a container (the machines use overlay2; a real server needs nothing); the
+  notebook's local door accepts only a local Host (the test host's forward says so); the test's own
+  services must never wait on a synchronous child.
+- What the full test found: running across midnight, every scan kept its upload day as its date,
+  because the phone's date was recognised only on the very upload day. The same hits a phone in
+  another time zone than the server; the day either side now counts, and the installer takes the
+  person's time zone from their notebook. And a Clerk that lost its records made a second To sort
+  page after "Paperless sorts"; it finds its own again now.
