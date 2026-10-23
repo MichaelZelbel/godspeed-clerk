@@ -55,8 +55,10 @@ test("F13: with a batch size of 2 and five documents, 2 are sorted and 3 wait; t
   } finally { await w.close(); }
 });
 
-test("F13: with a note batch of 2 and five documents the notes come 2 per run, \"2 of 5 noted\"", async () => {
-  const w = await kitWorld({ only: ["utility-invoice", "roofing-invoice", "tax-assessment", "pay-slip", "council-letter"], settings: { note_batch: 2 } });
+test("F13: an archive of five documents with a note batch of 2: the notes come 2 per run, \"2 of 5 noted\"", async () => {
+  // Paperless sorts and the documents were there before the Clerk: the archive, noted in batches.
+  // (A document the Clerk sorts in a run is noted in that run; see notes.test.mjs.)
+  const w = await kitWorld({ sorting: "paperless", only: ["utility-invoice", "roofing-invoice", "tax-assessment", "pay-slip", "council-letter"], settings: { note_batch: 2 } });
   try {
     const first = await w.run();
     assert.equal(first.noted, 2);

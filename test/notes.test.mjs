@@ -349,3 +349,15 @@ test("F11: what the notebook's own processing wrote about the letter comes out o
     assert.equal(kept.content.trim(), "Ask about the bonus.");
   } finally { await w.close(); }
 });
+
+test("documents sorted in a run get their notes in that run, whatever the note batch, so no second AI call", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "pay-slip", "council-letter"], settings: { note_batch: 1 } });
+  try {
+    const r = await w.run();
+    assert.equal(r.sorted, 3);
+    assert.equal(r.noted, 3);
+    await w.runUntilQuiet();
+    assert.equal(summaries(w), 0);
+    assert.ok(w.notes().every((n) => n.clerk_summary));
+  } finally { await w.close(); }
+});
