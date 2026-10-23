@@ -119,6 +119,14 @@ the mark (`source_app: godspeed-clerk`, `clerk_doc`, `clerk_sum`), so a reinstal
 a rebuilt Paperless find the same note, never a second one. A note the person deleted is never
 made again (the notebook refuses its id); one in the trash stays there.
 
+Every note carries `skip_processing: true`: the notebook finds it in search and gives it to the
+assistant like any note, but its own processing (one note at a time, at most 40 a day, oldest
+first) never takes it, so a pile of papers never holds the person's own notes back, and the summary
+and key facts the Clerk already wrote are not paid for twice. A note written before the mark, or
+one the Clerk otherwise leaves as it is (in the trash, changed inside its part), gets the mark and
+nothing else in one update; the record keeps `marked`, so a quiet run asks the notebook nothing. A
+notebook older than the mark ignores it and processes the notes as before.
+
 The Clerk's part ends with its own heading ("Your notes", in the person's language, its words
 kept in the header as `clerk_yours`); what the person writes below it, or above the part, is
 theirs and is kept exactly. The notebook's editor writes notes back through its own Markdown
@@ -134,8 +142,10 @@ come out, and the person hears it once.
 Kept out (F11), the person's lines stay under the title "Document kept out of the notebook"; a
 note with none goes to the notebook's trash (`clerk_trashed`), and comes back when the tag is
 taken off again. What the notebook's own processing wrote about the letter (the fields it names
-in `metadata.ai_fields`) comes out too. Suggestions that processing already put in the
-notebook's review queue are the notebook's and stay.
+in `metadata.ai_fields`) comes out too. Suggestions that processing put in the notebook's review
+queue from the letter (a note written before the mark) are withdrawn by the notebook itself when
+the note goes to the trash or no longer holds the sentence they quote; they come back if the
+note does.
 
 The summary and key facts live in the note's header (`clerk_summary`, `clerk_facts`) and body,
 and nowhere else. They come from the AI answer that sorted the document; a document the Clerk did

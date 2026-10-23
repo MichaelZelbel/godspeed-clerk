@@ -34,7 +34,8 @@ repository: `docs/proposals/paperless-addon.md`.
   its full text, so you can ask Godspeed "what did my insurer write in November?" and get the
   answer. The summary comes from the same AI answer that sorted the document; papers that were
   already sorted before the Clerk came get their note without one, so an archive of thousands
-  costs no AI calls. Write your own notes below the heading "Your notes" (or above the Clerk's
+  costs no AI calls. Your notebook does not read these notes again for its own suggestions, so a
+  pile of papers never holds your own notes back; search and Godspeed still find them. Write your own notes below the heading "Your notes" (or above the Clerk's
   part): the Clerk keeps them and only rewrites its own part. Notes travel wherever your notebook syncs, for example a private
   Git repository.
 - **Keeps a list**: the collection "Documents" in your notebook has one item per document, with

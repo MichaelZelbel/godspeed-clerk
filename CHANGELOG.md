@@ -1,5 +1,12 @@
 # Changes
 
+## 0.2.1
+
+- Every note is for search, not for the notebook's own processing (`skip_processing`): Godspeed
+  still finds it, but a pile of papers no longer fills the notebook's 40-a-day queue for weeks
+  ahead of the person's own notes. Notes written before get the mark at the next run, in one small
+  update each.
+
 ## 0.2.0 (second batch, private trial)
 
 - One note per document in the Godspeed notebook (folder "Documents"): fields, a two-sentence
