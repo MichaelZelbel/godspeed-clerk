@@ -128,7 +128,8 @@ const serviceEnv = (drive) => ({
 async function wire(m, drive) {
   const env = serviceEnv(drive);
   const text = Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n";
-  await inM(m, "mkdir -p /var/lib/godspeed/clerk && chmod 700 /var/lib/godspeed/clerk && cat > /var/lib/godspeed/clerk/service.env && chmod 600 /var/lib/godspeed/clerk/service.env", { input: text });
+  // (Also for commands typed in a shell there, so nothing on a test machine ever asks the real Google.)
+  await inM(m, "mkdir -p /var/lib/godspeed/clerk && chmod 700 /var/lib/godspeed/clerk && cat > /var/lib/godspeed/clerk/service.env && chmod 600 /var/lib/godspeed/clerk/service.env && sed 's/^/export /' /var/lib/godspeed/clerk/service.env > /etc/profile.d/clerk-test.sh", { input: text });
   return env;
 }
 const clerk = (m, args, env, more = {}) => inM(m, `godspeed-clerk ${args}`, { env: { ...env, ...more } });
@@ -291,7 +292,7 @@ async function partA() {
 
   section("A: the restore copy (F9)");
   const cp = await clerk("a", "copy", env);
-  check(cp.code === 0 && /restore copy is whole/.test(cp.out), `the copy: ${cp.out.trim()}`);
+  check(cp.code === 0 && /restore copy is whole/.test(cp.out), `the copy: ${cp.all.trim().replace(/\n/g, " | ")}`);
   const D = S.drives.main;
   const restore = JSON.parse(D.byPath("The Clerk/paperless/restore.json")?.content?.toString() || "{}");
   check(restore.paperless_version === "3.3.3" && restore.documents === A.slugs.length && restore.user === login.user, `restore.json: Paperless ${restore.paperless_version}, ${restore.documents} documents, account ${restore.user}`);
@@ -300,7 +301,7 @@ async function partA() {
   const w0 = D.writes.length;
   const again = await clerk("a", "copy", env);
   const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/(originals|archive)\//.test(p));
-  check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.out.trim()})`);
+  check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.all.trim().replace(/\n/g, " | ")})`);
   A.restoreAt = restore.made_at;
   A.snapshot = await snapshotOf(p, A.tok);
   A.plan = await readIn("a", "/var/lib/godspeed/clerk/plan.json");
@@ -308,11 +309,12 @@ async function partA() {
   note(`A holds ${A.snapshot.length} documents; the drive ${A.counts.files} filed files, the notebook ${A.counts.notes} notes, ${A.counts.items} items, ${A.counts.deadlines} deadlines`);
 
   section("A: another account keeps a paper in this Paperless (F9)");
-  await p.req("POST", "/api/users/", { body: { username: "sam", password: "a-made-up-password-for-sam", is_superuser: false, is_active: true }, headers: { Authorization: `Token ${A.tok}` } });
+  // (A superuser, as in the full test: a new account without rights may not upload.)
+  await p.req("POST", "/api/users/", { body: { username: "sam", password: "a-made-up-password-for-sam", is_superuser: true, is_active: true }, headers: { Authorization: `Token ${A.tok}` } });
   const sam = await p.signIn("sam", "a-made-up-password-for-sam");
   await uploadKit(p, sam.body.token, ["second-account-letter"], 30);
   const shared = await clerk("a", "copy", env);
-  check(/another account keeps documents/.test(shared.out), `the export stops: ${shared.out.trim()}`);
+  check(/another account keeps documents/.test(shared.out), `the export stops: ${shared.all.trim().replace(/\n/g, " | ")}`);
   check(JSON.parse(D.byPath("The Clerk/paperless/restore.json").content.toString()).made_at === A.restoreAt, "the restore copy in the drive is the one from before");
   const samId = (await p.all(A.tok, "/api/documents/?page_size=100&fields=id,owner,original_file_name")).find((d) => /16-17-30/.test(d.original_file_name))?.id;
   check(!!samId && !markedFiles(D).some((f) => f.appProperties.clerkDoc === String(samId)) && !filesOf(D).some((f) => /16-17-30/.test(f.name)), "nothing of that account reaches the drive");

@@ -24,6 +24,12 @@
   there too, never to the notebook's collection.
 - Fixed: running the install line again (the update) paused a working Clerk; now only the first
   setup leaves it paused.
+- Fixed: a phone in another time zone than Paperless, or a scan Paperless read just after midnight,
+  kept its upload day as the paper's date (the date a phone puts was only recognised on the very
+  upload day). The day before or after counts as the upload day too. Paperless installed by the
+  Clerk keeps the person's time zone from their Godspeed notebook.
+- Fixed: a Clerk that lost its records found its own To sort page again only when Godspeed sorted;
+  from "Paperless sorts" it made a second one.
 - The systemd service reads extra settings from `service.env` in the state folder.
 - install.sh finds the Node.js Godspeed's own installer keeps in the Godspeed folder, and takes the
   Clerk from `GODSPEED_CLERK_TARBALL` when given; install.ps1 for Windows; INSTALL-FOR-ASSISTANTS.md.
