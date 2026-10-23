@@ -328,3 +328,24 @@ test("taking the tag off again brings back the note the Clerk put in the trash",
     assert.equal(w.notesOf("council-letter").length, 1);
   } finally { await w.close(); }
 });
+
+test("F11: what the notebook's own processing wrote about the letter comes out of a kept-out note too", async () => {
+  const w = await kitWorld({ only: ["council-letter", "pay-slip"] });
+  try {
+    await w.runUntilQuiet();
+    // As the notebook's processing leaves a note: its fields named in metadata.ai_fields, its tags.
+    const processed = { metadata: { summary: "Bin days change in July.", people: ["Jordan Reeve"], type: "letter", ai_fields: ["summary", "people", "type"], my_rating: 3 }, tags: ["bins", "council"] };
+    for (const slug of ["council-letter", "pay-slip"]) w.nb.edit("notes", w.noteOf(slug).id, processed);
+    const slip = w.noteOf("pay-slip");
+    w.nb.edit("notes", slip.id, { content: `${slip.content}\nAsk about the bonus.\n` });
+    for (const slug of ["council-letter", "pay-slip"]) change(w, slug, { tags: [...w.doc(slug).tags, tagId(w, KEEP_OUT)] });
+    await w.runUntilQuiet();
+    const trashed = w.noteOf("council-letter"), kept = w.noteOf("pay-slip");
+    assert.equal(trashed.is_trashed, true);
+    assert.deepEqual(trashed.metadata, { my_rating: 3 }, "only what the person set stays");
+    assert.deepEqual(trashed.tags, [], "nothing of the person's was in it, so its tags go too");
+    assert.deepEqual(kept.metadata, { my_rating: 3 });
+    assert.deepEqual(kept.tags, ["bins", "council"], "tags cannot be told apart from the person's own, so they stay");
+    assert.equal(kept.content.trim(), "Ask about the bonus.");
+  } finally { await w.close(); }
+});
