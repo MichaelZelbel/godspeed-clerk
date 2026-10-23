@@ -35,7 +35,11 @@ function checkKit(w) {
 function picture(w) {
   return Object.fromEntries(ALEX.map((slug) => {
     const d = w.doc(slug);
-    return [slug, { title: d.title, created: d.created, sender: w.senderName(d), type: w.typeName(d), tags: w.tagNames(d), files: w.fileOf(slug).map((f) => w.drive.pathOf(f.id)).sort() }];
+    const sum = w.record(slug)?.sum;
+    // Each pretend world has its own Paperless port and file checksums, so links and note ids differ.
+    const same = (t) => t.replaceAll(w.pl.url, "PAPERLESS").replace(/clerk-[0-9a-f]{32}/g, "NOTE");
+    return [slug, { title: d.title, created: d.created, sender: w.senderName(d), type: w.typeName(d), tags: w.tagNames(d), files: w.fileOf(slug).map((f) => w.drive.pathOf(f.id)).sort(),
+      notes: w.notesOf(slug).map((n) => same(n.content)).sort(), items: w.nb.rows("collection_items").filter((i) => i.source_id === sum).map((i) => same(JSON.stringify(i.data))) }];
   }));
 }
 
@@ -174,12 +178,14 @@ test("F18: killed after each step in turn, and once in the middle of an upload: 
       let seen = 0;
       return (p) => { if (p === point && ++seen === nth) { const e = new Error(`killed at ${point}`); e.name = "Killed"; throw e; } };
     };
-    for (const [point, nth] of [["after-copy", 2], ["mid-upload", 1], ["after-sort", 1], ["after-sort", 2], ["after-file", 1], ["after-file", 3]]) {
+    for (const [point, nth] of [["after-copy", 2], ["mid-upload", 1], ["after-sort", 1], ["after-sort", 2], ["after-file", 1], ["after-file", 3], ["after-note", 1], ["after-note", 3], ["after-item", 1], ["after-item", 2]]) {
       await assert.rejects(w.run({ crash: killed(point, nth), chunkSize: 1024 }), /killed/, point);
     }
     await w.runUntilQuiet();
     assert.deepEqual(picture(w), want);
     for (const slug of ALEX) assert.equal(w.fileOf(slug).length, 1, slug);
+    for (const slug of ALEX) assert.equal(w.notesOf(slug).length, expected(slug).not_in_notebook ? 0 : 1, `${slug}: one note`);
+    assert.equal(w.nb.rows("collection_items").length, ALEX.length, "one item per document");
   } finally { await w.close(); }
 });
 
@@ -213,10 +219,12 @@ test("F18: with the records deleted, a run finds every file again and makes none
     fs.rmSync(w.paths.records, { recursive: true, force: true });
     const before = w.drive.writes.length;
     const plBefore = w.pl.writes.length;
+    const nbBefore = w.nb.writes.length;
     await w.runUntilQuiet();
     assert.deepEqual(picture(w), want);
     assert.deepEqual(w.drive.writes.slice(before), []);
     assert.deepEqual(w.pl.writes.slice(plBefore), []);
+    assert.deepEqual(w.nb.writes.slice(nbBefore), [], "no second note or item, nothing rewritten");
   } finally { await w.close(); }
 });
 

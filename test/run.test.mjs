@@ -55,6 +55,24 @@ test("F13: with a batch size of 2 and five documents, 2 are sorted and 3 wait; t
   } finally { await w.close(); }
 });
 
+test("F13: with a note batch of 2 and five documents the notes come 2 per run, \"2 of 5 noted\"", async () => {
+  const w = await kitWorld({ only: ["utility-invoice", "roofing-invoice", "tax-assessment", "pay-slip", "council-letter"], settings: { note_batch: 2 } });
+  try {
+    const first = await w.run();
+    assert.equal(first.noted, 2);
+    assert.equal(first.notes_progress, "2 of 5 noted");
+    assert.equal(first.notes_waiting, 3);
+    assert.match(first.notes.join(" "), /more notes wait for the next run/);
+    const second = await w.run();
+    assert.equal(second.notes_progress, "4 of 5 noted");
+    const third = await w.run();
+    assert.equal(third.notes_progress, "5 of 5 noted");
+    assert.equal(third.notes_waiting, 0);
+    assert.equal(w.notes().length, 5);
+    assert.equal(w.nb.rows("collection_items").length, 5);
+  } finally { await w.close(); }
+});
+
 test("F8: a scan that arrives while a run is sorting gets its first copy in that same run", async () => {
   const w = await kitWorld({ only: ["utility-invoice", "roofing-invoice"] });
   try {
@@ -128,9 +146,11 @@ test("F14: no log line, record or temporary file holds a sentence of a kit docum
     for (const f of files.filter(fs.existsSync)) {
       const body = fs.readFileSync(f, "utf8");
       for (const s of sentences) assert.ok(!body.includes(s), `${path.basename(f)} holds "${s}"`);
+      for (const n of w.notes()) for (const x of [n.clerk_summary, ...(n.clerk_facts || [])].filter(Boolean)) assert.ok(!body.includes(x), `${path.basename(f)} holds a note's "${x}"`);
       for (const t of titles) assert.ok(!body.includes(t), `${path.basename(f)} holds the title "${t}"`);
     }
     assert.match(fs.readFileSync(w.paths.log, "utf8"), /doc \d+: /);
+    assert.ok(w.notes().length > 0 && w.messages.length === 1, "notes were written and a message sent, and none of it stays here");
     // No temporary file anywhere: the state folder holds the Clerk's own files and nothing else.
     const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records"];
     for (const n of fs.readdirSync(w.paths.root)) assert.ok(known.includes(n), `unexpected ${n} in the state folder`);
