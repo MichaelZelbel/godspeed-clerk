@@ -147,3 +147,9 @@ test("the services start godspeed-clerk worker, as the right account", () => {
   assert.match(launchAgentPlist(p), /<string>worker<\/string>/);
   assert.match(windowsTaskXml({ ...p, user: "PC\\alex", conhost: "" }), /worker/);
 });
+
+test("the run's summary says how many were noted, how far the notes are, and whether a message went", async () => {
+  const { summary } = await import("../lib/commands/run.mjs");
+  const line = summary({ copied: 1, sorted: 1, check: 0, filed: 1, noted: 2, progress: "5 of 5 sorted", notes_progress: "4 of 5 noted", waiting: 0, to_check: 0, messaged: 1, notes: [] });
+  assert.equal(line, "1 copied to the drive, 1 sorted, 0 to check, 1 filed, 2 noted. 5 of 5 sorted, 4 of 5 noted; 0 waiting, 0 to check in all. One message sent.");
+});
