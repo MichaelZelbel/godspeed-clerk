@@ -14,8 +14,12 @@ returned Google access), F10 (one note per document with its full text and links
 line kept through a rename), F11 (the letter uploaded with "Not in notebook" has no note; the tag
 added later trashes a note or leaves only the person's line), F12 (the letter that tries to
 instruct the AI), F14 (no sentence, title or summary in the logs, records or temporary files),
-F16 (one message for the kit naming the blurry scan, none for a run with nothing new, one for a
-deletion, one for lost access; one link each), F17 (one item per document, a kept-out item without
+F16 (one message for the kit naming the blurry scan with a link to its own file, none for a run with
+nothing new, one for a deletion linking the file that stays, one for lost access without a link),
+F19 (the blurry scan asked about with numbered choices, the assistant's block from `godspeed-clerk
+context`, `godspeed-clerk answer` refusing a folder outside the documents folder, filing "the
+Letters folder" at once with Check this taken off in Paperless, and making a missing folder only
+after "yes"), F17 (one item per document, a kept-out item without
 a title) and F18 (a real kill after each step, notes and items included, and in the middle of an
 upload; the records deleted).
 

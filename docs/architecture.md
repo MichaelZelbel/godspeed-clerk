@@ -16,7 +16,12 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `note.mjs` | The text of a note: the Clerk's part, and where the person's own lines begin. |
 | `notes.mjs` | The note step: one note per document, the summary, "Not in notebook". |
 | `documents.mjs` | The "Documents" collection: one item per document. |
-| `notify.mjs` | One message per run for what the person can act on. |
+| `notify.mjs` | One message per run for what the person can act on: the questions, each paper with its own link. |
+| `questions.mjs` | A question for each paper to check (F19): its numbered choices, made from the AI's suggested places or the paper's sender. |
+| `where.mjs` | The person's words for a folder: a number, "the second one", a name with a typo, a path, a link; outside refused. |
+| `answers.mjs` | An answer applied (sender, "Check this" off, filed at once) and kept in the plan; `place` for rules said at any time. |
+| `assistant.mjs` | What the person's assistant sees before each turn (`godspeed-clerk context`). |
+| `../setup/assistant.mjs` | The recipe `skill/clerk` and the Hermes plugin `hermes/plugin/godspeed-clerk`, installed by setup. |
 | `run.mjs` | One run: the steps over all documents, in batches and within a time limit. |
 | `records.mjs` | One record per document, the log, the outbox. |
 | `../channels/` | Where messages go: the assistant's own Telegram bot, this computer's notifications. |
@@ -40,9 +45,13 @@ file each, found by the registry). The work lives in `lib/core/`:
    `note_batch` (50) per run. A note is written again only when what it is made from changed.
    When the notebook does not answer, this part waits; after `notebook_down_hours` the person
    hears it once.
-7. One message for what the person can act on: what is new in the outbox, no longer true or
-   already said dropped, one link. While a pile still waits to be sorted, papers to check are held
-   (at most a day) so they come together.
+7. One message for what the person can act on: the questions not asked yet (at most three open
+   at a time), what is new in the outbox, no longer true or already said dropped, each paper with
+   a link to its own file. While a pile still waits to be sorted, questions are held (at most a
+   day) so they come together.
+
+Before step 1, answers the person gave while the last run held the lock are applied (F19). After
+filing (3), every paper whose status is "check this" and that has no question gets one.
 
 The worker does one run every `interval_minutes` (3), and a run starts no new document after
 `run_minutes` (5), so a new scan has its first copy within about ten minutes.
@@ -154,3 +163,53 @@ and a paper to check.
 
 Every write carries the version just read (`expected`), so a note or item the person saves at
 that moment is refused by the notebook and kept; the Clerk tries again next run.
+
+## Asking the person, and learning (F19)
+
+A paper the Clerk cannot place gets one question in `questions.json`, made after filing, when its
+file waits in To sort. Its choices: up to three places from one AI call over the paper's text and
+the person's own folder names (the plan's folders and the likeliest sender folders; never anything
+outside the documents folder), or, without a usable answer, a folder named like the paper's sender
+and the folders whose names it shares; then "another folder: say which". A choice is a folder by its
+id, or a new folder (a name and the folder it would be made in: where the plan keeps one folder per
+sender, else the documents folder). The numbers run across all open questions, so two papers asked
+at once never share one. An unreadable scan gets only "say which".
+
+The message asks at most three at a time; the person's assistant sees them before each turn
+(`godspeed-clerk context`, run by its Hermes plugin) with the exact command that answers each. The
+assistant passes the person's words to `godspeed-clerk answer "<words>" --about <paper>`:
+
+- a number or "the second one" picks a choice; a new folder offered as a choice is made when it is
+  picked; "leave it" closes the question for good;
+- words name a folder (`where.mjs`): its name in any case or with filler around it, a path, a
+  Drive link. Exactly one folder: filed. Several of that name (one at the top of the documents
+  folder wins), a typo (one or two letters, or two swapped), or what the AI reads in the words:
+  added to the question as choices, never filed on a guess. No folder of that name: one more choice,
+  and the question waits for "yes". Outside the documents folder (a link or a path leading out, or a
+  name that exists only outside, which Google is asked about by exact name): refused.
+
+Placing a paper (when Godspeed sorts): its sender is set when it has none (the one its sender
+folder is named after, an existing one or a new one), "Check this" comes off, and `rec.answer`
+makes the filing step move it there at once (`runOnce` for that paper alone). When Paperless or
+nobody sorts, nothing is written into Paperless; the paper is filed all the same.
+
+Learning: the folder is kept for the paper's sender. Inside that sender's own folder of the same
+name, the link (`links.json`) is enough, since the plan sends it there anyway; anywhere else a rule
+`{ sender, folder, folder_id }` goes to the top of the plan. Another open question about a paper
+from the same sender is the same question and is answered with it. `godspeed-clerk place` takes the
+same at any time: `--sender` (a sender rule), `--kind` (a rule `{ kind, folder, folder_id }`; the
+sorting AI is told the person's kinds and names the one a paper is, kept in the record as a hash),
+`--paper` (one paper moved, and learned like an answer). A rule names its folder by id, so a
+folder the person renames or moves stays that folder.
+
+An answer given while a run holds the lock (or while the Clerk is paused) waits in
+`answers.jsonl`; the next run applies it first, and when it needs the person again (choices, a
+yes), the question goes back into that run's message with its choices as they are now.
+
+## Field by field (F7)
+
+The sorting AI also names the fields it is unsure of (`unsure`). Not confident, but sure of the
+sender, and that sender has a folder of the same name where the plan keeps sender folders, or a
+Paperless sender of the same name: the paper gets that sender and is filed (into that folder, by
+the plan's own rule for it); the fields it is unsure of are not set. An answer that names nothing it
+is unsure of counts as unsure of everything, as before.

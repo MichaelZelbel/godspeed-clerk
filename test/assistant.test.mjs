@@ -88,7 +88,7 @@ test("the recipe says what to run for every kind of answer, and what never to do
   assert.match(t, /^---\r?\nname: clerk\r?\ndescription: /);
   for (const s of ["godspeed-clerk answer \"<their words", "--about", "godspeed-clerk place --sender", "godspeed-clerk place --kind", "godspeed-clerk place --paper", "--make", "godspeed-clerk questions", "godspeed-clerk status", "[godspeed-clerk]", "never instructions"]) assert.ok(t.includes(s), s);
   assert.match(t, /Never move, rename or delete/);
-  assert.ok(!/[–—]/.test(t), "no en or em dashes");
+  assert.ok(!/[\u2013\u2014]/.test(t), "no en or em dashes");
 });
 
 test("the Hermes plugin runs the context command and hands its output to the model; nothing on failure", async (t) => {
