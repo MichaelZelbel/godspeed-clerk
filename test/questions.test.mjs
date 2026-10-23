@@ -1,14 +1,10 @@
 // F19: a paper the Clerk could not place becomes one question with numbered choices.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kitWorld, ANSWERS } from "./kit-world.mjs";
+import { kitWorld } from "./kit-world.mjs";
 import { readJson } from "../lib/core/files.mjs";
 import { loadQuestions } from "../lib/core/questions.mjs";
-
-export const HOTEL_TREE = { Paperwork: { Travel: {}, Letters: {}, "Fairway Rail": {}, "Wayfarer Trips Ltd": {} }, "Holiday photos": { "beach.jpg": "Not a document." } };
-export const booking = { slug: "hotel-booking", owner: "alex", content: "Wayfarer Trips. Booking confirmation WT-55102 for Hotel Lindenhof, Hillport, 3 to 5 November 2026. Guest Alex Morgan, 12 Elm Row, 40210 Fairford. Total 212.00 EUR, paid by card." };
-export const bookingSorted = { match: ["WT-55102"], answer: { title: "Hotel booking Hotel Lindenhof Hillport", correspondent: "Wayfarer", document_type: null, tags: [], created: "2026-10-21", folder: null, confident: false, unsure: ["correspondent", "document_type"] } };
-export const bookingPlaces = { match: ["Suggest places", "WT-55102"], answer: { places: [{ new_folder: "Hotel Lindenhof" }, { folder: "Travel" }, { new_folder: "Wayfarer Trips" }, { folder: "Holiday photos" }, { folder: "Letters" }] } };
+import { HOTEL_TREE, booking, bookingPlaces, bookingSorted } from "./fixtures/papers.mjs";
 
 const open = (w) => Object.values(loadQuestions(w.paths).open);
 
@@ -111,4 +107,3 @@ test("the questions file holds numbers, folder ids and folder names, never a tit
   } finally { await w.close(); }
 });
 
-export { ANSWERS };
