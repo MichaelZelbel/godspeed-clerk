@@ -279,3 +279,41 @@ test("two first copies with the same upload day and title get \" (2)\" in To sor
     assert.deepEqual([w.pathOf("parking-permit-a"), w.pathOf("parking-permit-b")].sort(), ["Paperwork/To sort/2026-10-22 Scan (2).pdf", "Paperwork/To sort/2026-10-22 Scan.pdf"]);
   } finally { await w.close(); }
 });
+
+// F7, judged field by field (PRD test): "a ticket whose type the AI is unsure of, from a sender that
+// has a folder of its own, is filed into that folder".
+const RAIL_TREE = { Paperwork: { "Fairway Rail": {}, Letters: {}, Insurance: {} }, "Holiday photos": {} };
+const ticket = { slug: "rail-ticket", owner: "alex", content: "Fairway Rail. Your ticket FR-TICKET-0091. Fairford to Hillport, single, 20 October 2026, standard class. Passenger Alex Morgan, 12 Elm Row, 40210 Fairford. Price 38.50 EUR." };
+const ticketAnswer = { match: ["FR-TICKET-0091"], answer: { title: "Train ticket Fairford to Hillport", correspondent: "Fairway Rail", document_type: "Receipt", tags: ["Car"], created: "2026-10-20", folder: "{sender}", sender_folder: null, confident: false, unsure: ["document_type", "tags"] } };
+
+test("F7: a ticket whose type the AI is unsure of, from a sender that has a folder of its own, is filed into that folder", async () => {
+  const w = await kitWorld({ only: [], extra: [ticket], tree: RAIL_TREE, rules: [{ folder: "{sender}" }], answers: [ticketAnswer] });
+  try {
+    await w.runUntilQuiet();
+    const d = w.doc("rail-ticket");
+    assert.equal(w.pathOf("rail-ticket"), "Paperwork/Fairway Rail/2026-10-20 Train ticket Fairford to Hillport.pdf");
+    assert.equal(w.senderName(d), "Fairway Rail");
+    assert.equal(w.typeName(d), null, "the type it was unsure of is left for the person");
+    assert.deepEqual(w.tagNames(d), [], "no Check this, no tag it was unsure of");
+    assert.equal(w.messages.length, 0, "nothing to act on");
+  } finally { await w.close(); }
+});
+
+test("F7: the same ticket with a type plan: the sender's folder is found where the plan keeps sender folders", async () => {
+  const tree = { Paperwork: { Invoices: { "Fairway Rail": {} }, Letters: {} } };
+  const w = await kitWorld({ only: [], extra: [ticket], tree, rules: [{ type: "Invoice", folder: "Invoices/{sender}" }, { type: "Letter", folder: "Letters" }], answers: [ticketAnswer] });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("rail-ticket"), "Paperwork/Invoices/Fairway Rail/2026-10-20 Train ticket Fairford to Hillport.pdf");
+    assert.ok(!w.tagNames(w.doc("rail-ticket")).includes("Check this"));
+  } finally { await w.close(); }
+});
+
+test("F7: a sender folder plan that goes on below the sender (years) files the ticket into its year", async () => {
+  const tree = { Paperwork: { Travel: { "Fairway Rail": { 2025: {} } }, Letters: {} } };
+  const w = await kitWorld({ only: [], extra: [ticket], tree, rules: [{ type: "Letter", folder: "Letters" }, { folder: "Travel/{sender}/{year}" }], answers: [ticketAnswer] });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.pathOf("rail-ticket"), "Paperwork/Travel/Fairway Rail/2026/2026-10-20 Train ticket Fairford to Hillport.pdf");
+  } finally { await w.close(); }
+});
