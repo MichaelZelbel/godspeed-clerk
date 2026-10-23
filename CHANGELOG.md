@@ -1,5 +1,12 @@
 # Changes
 
+## 0.3.3 (a dropped deadline leaves the note)
+
+- A deadline the person dropped in Godspeed leaves the letter's note (its "Deadlines" part) and
+  the Documents item's column, also when the records are lost and the note is read again. Found
+  after deploying 0.3.2: a hotel booking's note still listed the cancellation deadline the person
+  had dropped. A closed deadline stays listed: it was done.
+
 ## 0.3.2 (batch 3 fix round, after the first real paper with a date)
 
 - Only what a letter asks the person to do becomes a deadline. A booking's, ticket's or order's

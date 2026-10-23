@@ -70,7 +70,8 @@ repository: `docs/proposals/paperless-addon.md`.
     possible"): no deadline, the request goes into the note's key facts. A day already passed (an old letter from your pile): into the
     note's key facts, no deadline.
   - Each deadline is made once, however often the letter is read. Once you change or close one in
-    Godspeed, it is yours: the Clerk never changes it again. When you correct a letter's date in
+    Godspeed, it is yours: the Clerk never changes it again. One you drop leaves the letter's note
+    and its line in the Documents list; one you close stays there. When you correct a letter's date in
     Paperless, a deadline counted from it moves, unless you changed it.
   - When Godspeed sorts, the letter gets the tag "Important" until the day has passed; never again
     once you took it off, or dropped or closed the deadline.

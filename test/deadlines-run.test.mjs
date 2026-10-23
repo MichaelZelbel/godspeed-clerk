@@ -566,6 +566,39 @@ test("F15: after the person drops a deadline the Clerk made, it is never made ag
   } finally { await w.close(); }
 });
 
+// 23 October 2026, after the deploy: the hotel booking's note still listed the deadline the person
+// had dropped ("cancel the booking ... by 25 October") under Deadlines, and its item showed the day.
+test("F15: a deadline the person dropped leaves the note's Deadlines and the item, also after lost records; a closed one stays", async () => {
+  const w = await kitWorld({ only: ["water-invoice", "tax-office-letter"] });
+  const deadlinesPart = (slug) => w.noteOf(slug).content.split("## Deadlines")[1]?.split("\n## ")[0] ?? "";
+  const itemOf = (slug) => w.nb.rows("collection_items").find((i) => i.data.title === w.doc(slug).title);
+  try {
+    await w.runUntilQuiet();
+    assert.equal(itemOf("tax-office-letter").data.deadlines, "2026-11-13; 2026-11-30");
+    const tax = w.record("tax-office-letter").sum;
+    w.nb.personDrops(keyOf(tax, 1));
+    w.nb.personCloses(keyOf(w.record("water-invoice").sum, 1));
+    const before = w.messages.length;
+    await w.runUntilQuiet();
+    const part = deadlinesPart("tax-office-letter");
+    assert.ok(!part.includes("2026-11-13"), part);
+    assert.ok(part.includes("2026-11-30"), part);
+    assert.ok(!w.noteOf("tax-office-letter").content.split("## Key facts")[1].split("\n## ")[0].includes("2026-11-13"), "nor in the key facts");
+    assert.equal(itemOf("tax-office-letter").data.deadlines, "2026-11-30");
+    assert.ok(deadlinesPart("water-invoice").includes("2026-11-20"), "a closed deadline was done; the note keeps what the letter asked");
+    assert.equal(itemOf("water-invoice").data.deadlines, "2026-11-20");
+    assert.equal(w.messages.length, before, "no message about it");
+    // Lost records: the letter read again from its note, the dropped one stays out from the first write.
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    const revision = w.noteOf("tax-office-letter").revision;
+    await w.runUntilQuiet();
+    assert.ok(!deadlinesPart("tax-office-letter").includes("2026-11-13"));
+    assert.ok(w.noteOf("tax-office-letter").revision <= revision + 1, "never written with the dropped deadline back in it and then without");
+    assert.equal(itemOf("tax-office-letter").data.deadlines, "2026-11-30");
+    assert.equal(w.nb.deadlineRows().length, 3, "nothing made again");
+  } finally { await w.close(); }
+});
+
 test("F16: a deadline whose date needs a check is one plain sentence with its date and the paper's title, linking to the paper in Paperless", async () => {
   const w = await kitWorld({ only: ["parking-notice"] });
   try {

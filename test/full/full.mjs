@@ -169,6 +169,15 @@ async function startNotebook() {
       c.stdout.on("data", (d) => (out += d));
       c.on("close", () => resolve(out));
     }),
+    // The person drops a deadline in Godspeed (tools/due.js drop): the exit code and what it said.
+    drop: (slug) => new Promise((resolve) => {
+      const env2 = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GODSPEED_|HERMES_)/i.test(k)));
+      const c = spawn(process.env.NOTEBOOK_NODE || process.execPath, [path.join(CHECKOUT, "tools", "due.js"), "drop", slug, "--yes", "--godspeed", ws], { env: env2 });
+      let out = "";
+      c.stdout.on("data", (d) => (out += d));
+      c.stderr.on("data", (d) => (out += d));
+      c.on("close", (code) => resolve({ code, out }));
+    }),
     notes: async () => (await query({ table: "notes", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] })),
     items: async () => {
       const colls = await query({ table: "collections", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] });
@@ -522,6 +531,19 @@ async function main() {
       const said = await NB.remindersOn("2026-11-18");
       check(said.includes("Pay the Brightwater Utilities electricity invoice of 212.40 EUR"), `Godspeed's own deadline reminders say it as its day comes (tools/due.js today on 18 November: ${JSON.stringify(said.slice(0, 300))})`);
       check(new RegExp(`Deadlines: ${wantDeadlines(ALEX.filter((s) => s !== "unusable-answer"))} made in Godspeed from your letters\\.`).test((await must(state, ["status"], env)).out), "status says how many deadlines the Clerk made");
+      // The person drops one in Godspeed (23 October 2026: a hotel booking's note kept listing the
+      // deadline the person had dropped): it leaves the note's Deadlines part and the item, quietly,
+      // and is never made again.
+      const sentBefore = TG.sent.length;
+      const dropped = await NB.drop(hotel[0]?.slug || "");
+      await runUntilQuiet(state, env);
+      const hotelNote = (await NB.notes()).find((n) => n.clerk_doc === ids["hotel-booking"]);
+      const hotelPart = hotelNote?.content.split("## Deadlines")[1]?.split("\n## ")[0] ?? "";
+      const hotelItem = (await NB.items()).find((i) => i.source_id === sumOf("hotel-booking"));
+      const after = await NB.deadlines();
+      check(dropped.code === 0 && !!hotelNote && !hotelPart.includes("2026-10-25") && hotelItem?.data.deadlines === "" && TG.sent.length === sentBefore
+        && after.length === dl.length && after.find((x) => x.key === hotel[0]?.key)?.state === "dropped",
+        `F15: a deadline the person dropped in Godspeed leaves the note's Deadlines and the item, with no message, and is not made again (${JSON.stringify({ code: dropped.code, part: hotelPart.trim(), item: hotelItem?.data.deadlines, sent: TG.sent.length - sentBefore, deadlines: after.length })})`);
     } else console.log("  SKIP  the notes, the collection and the message (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
 
     section("F8: changes in Paperless and by hand in the drive");

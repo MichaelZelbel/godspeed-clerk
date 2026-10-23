@@ -200,7 +200,10 @@ never counts a date: `deadlines.mjs` does.
   Lost records are rebuilt from the note's header (`clerk_asks`), else from the deadlines
   Godspeed holds for the paper, and only then by reading it again.
 - Godspeed says whether the person touched a deadline (changed its name or a date, closed or
-  dropped it). Such a deadline is never moved or renamed by the Clerk again. A corrected letter
+  dropped it). Such a deadline is never moved or renamed by the Clerk again. One the person
+  dropped is marked `dropped` on its request in the record, from Godspeed's list, which the run
+  reads before the notes: it leaves the note's "Deadlines" part and the item's column (a closed one
+  stays, it was done), and a note read again after lost records never shows it. A corrected letter
   date moves an untouched one counted from it; a "Not in notebook" tag added later renames an
   untouched one to the document's title and date (never a scan's file name, then "Letter", and
   never the upload day, then the letter's date), and it follows them when they change.
