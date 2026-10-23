@@ -18,7 +18,10 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
   const st = {
     users,
     tags: new Map(), correspondents: new Map(), types: new Map(), docs: new Map(),
-    writes: [], requests: [], next: { tag: 1, corr: 1, type: 1, doc: 1 }, binned: new Set(),
+    writes: [], requests: [], next: { tag: 1, corr: 1, type: 1, doc: 1, sp: 1, view: 1 }, binned: new Set(),
+    // Storage paths and saved views (F19); the saved views' visibility lives in the person's UI
+    // settings, as in Paperless 3.x.
+    storagePaths: new Map(), savedViews: new Map(), ui: { saved_views: { sidebar_views_visible_ids: [], dashboard_views_visible_ids: [] } },
   };
   for (const t of tags) { const id = t.id ?? st.next.tag; st.next.tag = Math.max(st.next.tag, id + 1); st.tags.set(id, { matching_algorithm: 1, match: "", is_inbox_tag: false, owner: 2, ...t, id }); }
   for (const c of correspondents) { const id = c.id ?? st.next.corr; st.next.corr = Math.max(st.next.corr, id + 1); st.correspondents.set(id, { matching_algorithm: 1, match: "", owner: 2, ...c, id }); }
@@ -81,7 +84,64 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
       }
       const user = userOf(req);
       if (!user) return send(res, 401, { detail: "Invalid token." });
-      if (p === "/api/ui_settings/") return send(res, 200, { user: { id: user.id, username: user.username, is_superuser: true }, settings: { version: "3.3.3" } });
+      if (p === "/api/ui_settings/") return send(res, 200, { user: { id: user.id, username: user.username, is_superuser: true }, settings: { version: "3.3.3", ...st.ui } });
+      // Storage paths: names are unique; a template must be one; PATCH changes the given fields.
+      if (p === "/api/storage_paths/" && req.method === "GET") return page(res, [...st.storagePaths.values()].sort((a, b) => a.id - b.id), q, p);
+      if (p === "/api/storage_paths/" && req.method === "POST") {
+        const b = JSON.parse(raw || "{}");
+        if ([...st.storagePaths.values()].some((o) => o.name.toLowerCase() === String(b.name).toLowerCase())) return send(res, 400, { name: ["storage path with this name already exists."] });
+        if (!b.path || /\{\{[^}]*$/.test(b.path)) return send(res, 400, { path: ["Invalid template"] });
+        const id = st.next.sp++;
+        const o = { id, slug: String(b.name).toLowerCase().replace(/\W+/g, "-"), name: b.name, path: b.path, match: b.match ?? "", matching_algorithm: b.matching_algorithm ?? 1, is_insensitive: b.is_insensitive ?? true, owner: user.id, document_count: 0 };
+        st.storagePaths.set(id, o);
+        return send(res, 201, o);
+      }
+      let sm = p.match(/^\/api\/storage_paths\/(\d+)\/$/);
+      if (sm) {
+        const o = st.storagePaths.get(Number(sm[1]));
+        if (!o) return send(res, 404, { detail: "Not found." });
+        if (req.method === "GET") return send(res, 200, o);
+        if (req.method === "PATCH") {
+          const b = JSON.parse(raw || "{}");
+          if (b.name && [...st.storagePaths.values()].some((x) => x.id !== o.id && x.name.toLowerCase() === String(b.name).toLowerCase())) return send(res, 400, { name: ["exists"] });
+          Object.assign(o, b);
+          return send(res, 200, o);
+        }
+        return send(res, 405, { detail: "Method not allowed" });
+      }
+      // Saved views. With API 9 (Accept: application/json; version=9) show_in_sidebar and
+      // show_on_dashboard go into the person's UI settings.
+      const v9 = /version=9/.test(req.headers.accept || "");
+      const visible = (id, b) => {
+        const s = st.ui.saved_views;
+        for (const [k, list] of [["show_in_sidebar", "sidebar_views_visible_ids"], ["show_on_dashboard", "dashboard_views_visible_ids"]]) {
+          if (!(k in b)) continue;
+          s[list] = s[list].filter((x) => x !== id);
+          if (b[k]) s[list] = [...s[list], id].sort((x, y) => x - y);
+        }
+      };
+      if (p === "/api/saved_views/" && req.method === "GET") return page(res, [...st.savedViews.values()], q, p);
+      if (p === "/api/saved_views/" && req.method === "POST") {
+        const b = JSON.parse(raw || "{}");
+        const id = st.next.view++;
+        const o = { id, name: b.name, sort_field: b.sort_field ?? null, sort_reverse: !!b.sort_reverse, filter_rules: b.filter_rules || [], display_mode: b.display_mode ?? null, page_size: b.page_size ?? null, owner: user.id };
+        st.savedViews.set(id, o);
+        if (v9) visible(id, b);
+        return send(res, 201, o);
+      }
+      sm = p.match(/^\/api\/saved_views\/(\d+)\/$/);
+      if (sm) {
+        const o = st.savedViews.get(Number(sm[1]));
+        if (!o) return send(res, 404, { detail: "Not found." });
+        if (req.method === "GET") return send(res, 200, o);
+        if (req.method === "PATCH") {
+          const b = JSON.parse(raw || "{}");
+          for (const k of ["name", "sort_field", "sort_reverse", "filter_rules", "display_mode", "page_size"]) if (k in b) o[k] = b[k];
+          if (v9) visible(o.id, b);
+          return send(res, 200, o);
+        }
+        return send(res, 405, { detail: "Method not allowed" });
+      }
       const coll = { "/api/tags/": [st.tags, "tag"], "/api/correspondents/": [st.correspondents, "corr"], "/api/document_types/": [st.types, "type"] }[p];
       if (coll) {
         const [map, key] = coll;
@@ -104,6 +164,10 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
         if (q.get("owner__id")) items = items.filter((d) => d.owner === Number(q.get("owner__id")));
         if (q.get("owner__id__in")) { const ids = q.get("owner__id__in").split(",").map(Number); items = items.filter((d) => ids.includes(d.owner)); }
         if (q.get("owner__isnull") === "true" || q.get("owner__isnull") === "1") items = items.filter((d) => d.owner === null);
+        if (q.get("storage_path__id")) items = items.filter((d) => d.storage_path === Number(q.get("storage_path__id")));
+        if (q.get("storage_path__isnull") === "1" || q.get("storage_path__isnull") === "true") items = items.filter((d) => d.storage_path === null || d.storage_path === undefined);
+        if (q.get("storage_path__id__in")) { const ids = q.get("storage_path__id__in").split(",").map(Number); items = items.filter((d) => ids.includes(d.storage_path)); }
+        if (q.get("storage_path__id__none")) { const ids = q.get("storage_path__id__none").split(",").map(Number); items = items.filter((d) => !ids.includes(d.storage_path)); }
         const ord = q.get("ordering") || "id";
         const key = ord.replace(/^-/, "");
         items.sort((a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : a.id - b.id) * (ord.startsWith("-") ? -1 : 1));
@@ -134,6 +198,21 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
     get writes() { return st.writes; },
     doc: (id) => st.docs.get(id)?.doc,
     remove: (id) => st.docs.delete(id),
+    storagePath: (id) => st.storagePaths.get(id),
+    savedView: (id) => st.savedViews.get(id),
+    visibleViews: () => ({ sidebar: [...st.ui.saved_views.sidebar_views_visible_ids], dashboard: [...st.ui.saved_views.dashboard_views_visible_ids] }),
+    // What a person does in Paperless's own pages: a storage path of their own, a path picked for a document.
+    addStoragePath: (o) => { const id = st.next.sp++; const sp = { id, slug: o.name.toLowerCase(), match: "", matching_algorithm: 0, is_insensitive: true, owner: 2, document_count: 0, ...o }; st.storagePaths.set(id, sp); return sp; },
+    // The documents a saved view lists, read the way Paperless's page reads its filter rules.
+    viewDocs: (id) => {
+      const v = st.savedViews.get(id);
+      let items = [...st.docs.values()].map((x) => x.doc).filter((d) => !st.binned.has(d.id));
+      for (const r of v.filter_rules) {
+        if (r.rule_type === 25) items = items.filter((d) => (r.value === null || r.value === undefined ? d.storage_path === null || d.storage_path === undefined : d.storage_path === Number(r.value)));
+        else throw new Error(`the pretend Paperless does not read rule ${r.rule_type}`);
+      }
+      return items.map((d) => d.id).sort((a, b) => a - b);
+    },
     // Paperless's bin: gone from lists and reads, back on restore.
     bin: (id) => st.binned.add(id),
     restore: (id) => { st.binned.delete(id); st.docs.get(id).doc.modified = now(); },
