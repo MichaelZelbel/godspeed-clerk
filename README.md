@@ -81,12 +81,16 @@ repository: `docs/proposals/paperless-addon.md`.
   make yourself becomes a folder of that name inside your documents folder. Picking a sender files
   a waiting paper as well. When Godspeed sorts, the Clerk sets each paper's storage path itself, so
   Paperless and your drive always agree. If your Paperless already has storage paths of its own,
-  you are asked first; with your "no" they stay as they are.
+  you are asked first; with your "no" they stay as they are. The "To sort" page comes with
+  "Godspeed sorts": with "Paperless sorts" or "nobody sorts" the Clerk writes nothing of a
+  document, so no page in Paperless could list exactly the papers waiting; the message then links
+  to the Documents collection in Godspeed, which does.
 - **Tells you only what needs you**: papers waiting to be sorted, a deadline whose date needs a
   check, a letter with no date to count a period from, Google Drive no longer letting
   it file, a document deleted in Paperless, the notebook silent for hours. One short message per
   run at most, with one link, never twice about the same thing; nothing otherwise. Papers to sort
-  are one line, "2 papers are waiting to be sorted.", and the link opens the "To sort" page. On a
+  are one line, "2 papers are waiting to be sorted.", and the link opens the "To sort" page (with
+  "Paperless sorts" or "nobody sorts", the Documents collection). On a
   server it comes through your assistant's own Telegram bot, on a computer as a notification.
   While a big pile is being sorted, the papers to sort come together when it is done.
 - **Picks up where it stopped**: a crash, a reboot or a lost connection at any step never leaves a
@@ -109,9 +113,9 @@ the code: there is no way for it to send a change.
   it never asks Paperless for a new one (that would sign your phone app out). It never deletes
   anything. It may create senders, "Tax <year>" tags and the "Check this" and "Important" tags,
   nothing else. "Important" it takes off again only when it put it on and the day has passed.
-  With your yes it also keeps the storage paths that mirror your plan and the "To sort" page, and
-  changes only those it made, in every sorting setting; with "Paperless sorts" and "nobody sorts"
-  that is all it ever writes, never anything of a document.
+  With your yes it also keeps the storage paths that mirror your plan (and, when Godspeed sorts,
+  the "To sort" page), and changes only those it made; with "Paperless sorts" and "nobody sorts"
+  the storage paths are all it ever writes, never anything of a document.
 - **Google Drive**: Google is asked for access to your whole drive, because that is the only
   permission that can file into folders you already have. The Clerk itself reads and writes only
   inside the documents folder you name (and, from a later version, a folder of its own), renames

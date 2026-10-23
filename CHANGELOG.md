@@ -9,8 +9,11 @@
   waiting. Picking a storage path moves the drive file at the next run, takes "Check this" off and
   keeps the folder for that paper's sender; a path the person makes becomes a folder inside the
   documents folder; picking a sender files a waiting paper too. When Godspeed sorts, the Clerk sets
-  every paper's storage path itself, the papers filed before once. Asked first when Paperless has
-  storage paths of its own; "no" leaves them alone.
+  every paper's storage path itself (a paper waiting or placed at once, the papers filed before a
+  few at a time). Asked first when Paperless has storage paths of its own; "no" leaves them alone,
+  and the storage paths papers already have at the yes are never taken as picks. The "To sort" page
+  comes with "Godspeed sorts" only; with "Paperless sorts" or "nobody sorts" the message links to
+  the Documents collection, which lists exactly the papers waiting.
 - The message for papers to sort is one line, "N papers are waiting to be sorted.", with one link
   to the To sort page.
 - F7 judged field by field: a sender the AI is sure of, with a folder of its own or a Paperless

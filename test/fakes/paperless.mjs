@@ -123,6 +123,7 @@ export async function startFakePaperless({ users = [{ id: 2, username: "alex", p
       if (p === "/api/saved_views/" && req.method === "GET") return page(res, [...st.savedViews.values()], q, p);
       if (p === "/api/saved_views/" && req.method === "POST") {
         const b = JSON.parse(raw || "{}");
+        if ([...st.savedViews.values()].some((v) => v.owner === user.id && v.name === b.name)) return send(res, 400, { error: "Object violates owner / name unique constraint" });
         const id = st.next.view++;
         const o = { id, name: b.name, sort_field: b.sort_field ?? null, sort_reverse: !!b.sort_reverse, filter_rules: b.filter_rules || [], display_mode: b.display_mode ?? null, page_size: b.page_size ?? null, owner: user.id };
         st.savedViews.set(id, o);

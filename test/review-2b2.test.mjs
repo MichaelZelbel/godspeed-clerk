@@ -380,9 +380,15 @@ test("REVIEW 19: after the yes, the storage paths of papers filed before are set
     writeJson(w.paths.settings, { ...s, storage_paths: "yes" });
     const before = w.pl.writes.length;
     await w.run();
-    const patches = w.pl.writes.slice(before).filter((x) => x.method === "PATCH" && /\/api\/documents\//.test(x.path)).length;
-    console.log(`REVIEW 19: ${patches} document PATCHes in the first run after the yes (copy_batch 3)`);
-    assert.ok(patches <= 3, `${patches} storage paths set in one run`);
+    // (Round 2 of the review: the papers waiting get the To sort path at once, so the page the
+    // message links to lists them; only the papers filed before the yes are levelled in batches.)
+    const toSort = [...w.pl.state.storagePaths.values()].find((x) => x.name === "To sort").id;
+    const sets = w.pl.writes.slice(before).filter((x) => x.method === "PATCH" && /\/api\/documents\//.test(x.path)).map((x) => JSON.parse(x.body).storage_path);
+    const filed = sets.filter((x) => x !== toSort).length;
+    const waiting = Object.keys(w.ids).filter((x) => w.doc(x).owner === 2 && w.tagNames(w.doc(x)).includes("Check this") && String(w.pathOf(x)).startsWith("Paperwork/To sort/"));
+    console.log(`REVIEW 19: ${filed} storage paths of filed papers and ${sets.length - filed} To sort paths set in the first run after the yes (copy_batch 3)`);
+    assert.ok(filed <= 3, `${filed} storage paths of filed papers set in one run`);
+    assert.equal(sets.length - filed, waiting.length, "the waiting papers, all of them");
   } finally { await w.close(); }
 });
 

@@ -294,7 +294,10 @@ async function main() {
         check(JSON.stringify(await all(alexTok, "storage_paths/")) === JSON.stringify(paths0) && JSON.stringify(await all(alexTok, "saved_views/")) === JSON.stringify(views0), "F19: with the person's \"no\", Paperless's storage paths and saved views are unchanged");
       } else {
         const sp = await all(alexTok, "storage_paths/"), views = await all(alexTok, "saved_views/");
-        check(sp.some((x) => x.name === "To sort") && sp.some((x) => x.name === "Letters") && views.some((v) => v.name === "To sort"), `F4, F19: with the yes, the storage paths and the To sort page are made, and nothing of a document changes (${sp.map((x) => x.name).join(", ")})`);
+        check(sp.some((x) => x.name === "To sort") && sp.some((x) => x.name === "Letters"), `F4, F19: with the yes, the storage paths are made, and nothing of a document changes (${sp.map((x) => x.name).join(", ")})`);
+        // No To sort page: without writing to documents (F4) no page could list exactly the papers
+        // waiting, so the message links to the collection, which does (F16).
+        check(JSON.stringify(views) === JSON.stringify(views0) && TG.sent.every((m) => !/\/view\/\d+/.test(m)), `F4, F16: no To sort page that could list filed papers, and no message links to one (${TG.sent.length} message(s))`);
       }
       const here = ALEX.filter((s) => !HELD_BACK.includes(s));
       check(here.every((s) => oneFile(fake, s).length === 1), `every document is filed, once (${here.length})`);
