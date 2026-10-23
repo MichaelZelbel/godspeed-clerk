@@ -361,3 +361,22 @@ test("documents sorted in a run get their notes in that run, whatever the note b
     assert.ok(w.notes().every((n) => n.clerk_summary));
   } finally { await w.close(); }
 });
+
+test("a paper to check that the person sorts by hand later gets its summary then, once", async () => {
+  const doc = { slug: "late", owner: "alex", content: "Harlow Services. A notice about account LATE-77 for Alex Morgan, 12 Elm Row, 40210 Fairford. Please read it carefully." };
+  const answers = [{ match: ["LATE-77"], answer: { title: "Account notice", correspondent: null, document_type: null, tags: [], created: "2025-02-02", folder: null, confident: false, summary: "Harlow Services writes about account LATE-77.", key_facts: ["Account LATE-77"] } }];
+  const w = await kitWorld({ only: [], extra: [doc], answers });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.noteOf("late").clerk_summary ?? null, null, "unsure: no summary");
+    assert.equal(summaries(w), 0);
+    const letter = [...w.pl.state.types.values()].find((t) => t.name === "Letter").id;
+    change(w, "late", { document_type: letter, tags: w.doc("late").tags.filter((t) => t !== tagId(w, "Check this")) });
+    await w.runUntilQuiet();
+    assert.equal(summaries(w), 1);
+    assert.equal(w.noteOf("late").clerk_summary, "Harlow Services writes about account LATE-77.");
+    change(w, "late", { title: "Account notice February" });
+    await w.runUntilQuiet();
+    assert.equal(summaries(w), 1);
+  } finally { await w.close(); }
+});
