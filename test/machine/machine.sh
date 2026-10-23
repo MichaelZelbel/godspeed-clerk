@@ -8,6 +8,7 @@
 #                                         on it, godspeed.sh); e.g. machine.sh up d --memory 1g
 #   machine.sh down <letter>              throws it away, its Docker data too
 #   machine.sh sh <letter> [command...]   a root shell on it (or one command)
+#   machine.sh wire <letter> [other]      points its Clerk at the test host's services (e2e.mjs --serve)
 #   machine.sh ip <letter>
 #
 # Needs GODSPEED_NOTEBOOK_CHECKOUT: a checkout of the Godspeed product, for its installer's functions.
@@ -67,6 +68,24 @@ up() {
   echo "Machine $m: $name ($ip), fresh, with Docker and a stand-in Godspeed. A shell: test/machine/machine.sh sh $m"
 }
 
+# The Clerk on a machine talks to the test host's pretend services (e2e.mjs --serve): service.env,
+# and the same for commands typed in a shell on the machine.
+wire() {
+  local m=$1 port=48900
+  [ "${2:-}" = other ] && port=48910
+  printf '%s\n' \
+    "GODSPEED_CLERK_DRIVE_API=http://$GW:$port" \
+    "GODSPEED_CLERK_GOOGLE_AUTH_URL=http://$GW:$port/o/oauth2/v2/auth" \
+    "GODSPEED_CLERK_GOOGLE_TOKEN_URL=http://$GW:$port/token" \
+    "GODSPEED_CLERK_NOTEBOOK=http://$GW:48901" \
+    "GODSPEED_CLERK_TELEGRAM_API=http://$GW:48902" \
+    "NODE_EXTRA_CA_CERTS=/opt/clerk-test/pebble-root.pem" \
+    "GODSPEED_CLERK_TEST=1" \
+    "GODSPEED_CLERK_TODAY=2026-10-22" \
+    | docker exec -i "clerk-$m" bash -c 'mkdir -p /var/lib/godspeed/clerk && chmod 700 /var/lib/godspeed/clerk && cat > /var/lib/godspeed/clerk/service.env && chmod 600 /var/lib/godspeed/clerk/service.env && sed "s/^/export /" /var/lib/godspeed/clerk/service.env > /etc/profile.d/clerk-test.sh'
+  echo "Machine $m talks to the test host's pretend Google Drive (port $port), notebook and Telegram."
+}
+
 down() {
   docker rm -f "clerk-$1" >/dev/null 2>&1 || true
   docker volume rm "clerk-$1-docker" >/dev/null 2>&1 || true
@@ -79,6 +98,7 @@ case "$cmd" in
   up) up "$@" ;;
   down) down "$@" ;;
   ip) ip_of "$1" ;;
+  wire) wire "$@" ;;
   sh) m=$1; shift; if [ $# -gt 0 ]; then docker exec -i "clerk-$m" bash -lc "$*"; else docker exec -it "clerk-$m" bash -l; fi ;;
   *) sed -n '2,15p' "$0"; exit 2 ;;
 esac

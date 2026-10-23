@@ -2,6 +2,7 @@
 // storage path, make one, pick a sender), and what the Clerk does when Godspeed sorts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { kitWorld, ANSWERS } from "./kit-world.mjs";
 import { readJson, writeJson } from "../lib/core/files.mjs";
 
@@ -327,5 +328,22 @@ test("F19: the To sort page follows the sorting setting: Godspeed's To sort path
     await w.run();
     assert.deepEqual(view(w).filter_rules.map((r) => [r.rule_type, String(r.value)]), [[25, String(toSort)]]);
     assert.deepEqual(w.pl.viewDocs(v.id), [w.ids["blurry-scan"]]);
+  } finally { await w.close(); }
+});
+
+test("F18, F19: a Clerk whose records were lost finds its own To sort page from Paperless sorts again, and makes no second one", async () => {
+  const w = await kitWorld({ sorting: "paperless", only: ["gym-letter", "utility-invoice"], settings: yes });
+  try {
+    sortedInPaperless(w);
+    await w.runUntilQuiet();
+    assert.equal(w.pl.state.savedViews.size, 1);
+    const [v] = [...w.pl.state.savedViews.values()];
+    // The records are lost (a new state folder would be the same): Godspeed sorts from now on.
+    for (const f of [w.paths.mirror]) fs.rmSync(f, { force: true });
+    writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "godspeed" });
+    await w.runUntilQuiet();
+    assert.equal(w.pl.state.savedViews.size, 1, `no second page: ${JSON.stringify([...w.pl.state.savedViews.values()].map((x) => x.name))}`);
+    assert.deepEqual(view(w).filter_rules.map((r) => [r.rule_type, String(r.value)]), [[25, String(spNamed(w, "To sort").id)]], "its rule follows the setting");
+    assert.equal(view(w).id, v.id);
   } finally { await w.close(); }
 });

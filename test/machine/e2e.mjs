@@ -19,7 +19,7 @@
 //
 //   GODSPEED_NOTEBOOK_CHECKOUT=<product checkout> node test/machine/e2e.mjs
 //   E2E_ONLY=a,b   only those parts (b needs a);  E2E_KEEP=1   keep the last machine
-import { spawnSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,16 +50,28 @@ function check(ok, what) { if (ok) { passes++; console.log(`  ok    ${what}`); }
 const section = (s) => console.log(`\n== ${s}`);
 const note = (s) => console.log(`        ${s}`);
 
+// Every command runs as a child process the event loop waits for, never synchronously: the
+// services the machines talk to (the drive, the files, Telegram) live in this process and must
+// keep answering while a machine works.
 function sh(cmd, args, { env, input, timeout = 30 * 60000 } = {}) {
-  const r = spawnSync(cmd, args, { encoding: "utf8", input, timeout, maxBuffer: 256 * 1024 * 1024, env: env ? { ...process.env, ...env } : process.env });
-  return { code: r.status ?? 1, out: (r.stdout || "") + (r.error ? String(r.error) : ""), err: r.stderr || "" };
+  return new Promise((resolve) => {
+    const c = spawn(cmd, args, { env: env ? { ...process.env, ...env } : process.env });
+    let out = "", err = "";
+    c.stdout.setEncoding("utf8"); c.stderr.setEncoding("utf8");
+    c.stdout.on("data", (d) => (out += d)); c.stderr.on("data", (d) => (err += d));
+    const t = setTimeout(() => c.kill("SIGKILL"), timeout);
+    c.on("close", (code) => { clearTimeout(t); resolve({ code: code ?? 1, out, err, all: `${out}\n${err}` }); });
+    c.on("error", (e) => { clearTimeout(t); resolve({ code: 127, out, err: String(e), all: String(e) }); });
+    c.stdin.on("error", () => {});
+    c.stdin.end(input ?? "");
+  });
 }
 const machine = (...a) => sh("bash", [path.join(MACHINE, "machine.sh"), ...a], { env: { GODSPEED_NOTEBOOK_CHECKOUT: PRODUCT } });
-const ipOf = (m) => machine("ip", m).out.trim();
+const IPS = { a: "10.89.0.10", b: "10.89.0.11", c: "10.89.0.12", d: "10.89.0.13" }; // as machine.sh gives them
+const ipOf = (m) => IPS[m];
 function inM(m, script, { env = {}, input, timeout } = {}) {
   const e = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
-  const r = sh("docker", ["exec", "-i", ...e, `clerk-${m}`, "bash", "-lc", script], { input, timeout });
-  return { ...r, all: `${r.out}\n${r.err}` };
+  return sh("docker", ["exec", "-i", ...e, `clerk-${m}`, "bash", "-lc", script], { input, timeout });
 }
 
 // ------------------------------------------------------------------ what outlives a machine
@@ -113,10 +125,10 @@ const serviceEnv = (drive) => ({
   GODSPEED_CLERK_TEST: "1", GODSPEED_CLERK_TODAY: "2026-10-22",
 });
 // The pretend services a machine's Clerk talks to, in its service.env (the worker) and for each command.
-function wire(m, drive) {
+async function wire(m, drive) {
   const env = serviceEnv(drive);
   const text = Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n";
-  inM(m, "mkdir -p /var/lib/godspeed/clerk && chmod 700 /var/lib/godspeed/clerk && cat > /var/lib/godspeed/clerk/service.env && chmod 600 /var/lib/godspeed/clerk/service.env", { input: text });
+  await inM(m, "mkdir -p /var/lib/godspeed/clerk && chmod 700 /var/lib/godspeed/clerk && cat > /var/lib/godspeed/clerk/service.env && chmod 600 /var/lib/godspeed/clerk/service.env", { input: text });
   return env;
 }
 const clerk = (m, args, env, more = {}) => inM(m, `godspeed-clerk ${args}`, { env: { ...env, ...more } });
@@ -173,7 +185,7 @@ async function uploadKit(p, tok, slugs, first = 1) {
 const filesOf = (drive) => drive.files().filter((f) => f.mimeType !== "application/vnd.google-apps.folder" && !f.trashed);
 const markedFiles = (drive) => filesOf(drive).filter((f) => f.appProperties?.clerkDoc);
 async function connectDrive(m, env) {
-  const c = clerk(m, `drive connect --client-id ${TEST_CLIENT.id} --client-secret ${TEST_CLIENT.secret}`, env);
+  const c = await clerk(m, `drive connect --client-id ${TEST_CLIENT.id} --client-secret ${TEST_CLIENT.secret}`, env);
   const link = (c.out.match(/(http\S+\/o\/oauth2\/v2\/auth\S+)/) || [])[1];
   if (!link) throw new Error(`no sign-in link: ${c.all}`);
   const landed = (await fetch(link, { redirect: "manual" })).headers.get("location");
@@ -189,21 +201,21 @@ async function waitFor(what, fn, { minutes = 8, every = 10000 } = {}) {
   }
 }
 const installLine = (m, args = "", env = {}) => inM(m, `curl -fsSL http://${HOST}:48903/install.sh | bash -s -- ${args}`, { env: { GODSPEED_CLERK_TARBALL: `http://${HOST}:48903/godspeed-clerk.tar.gz`, NODE_EXTRA_CA_CERTS: "/opt/clerk-test/pebble-root.pem", ...env }, timeout: 40 * 60000 });
-const readIn = (m, file) => { const r = inM(m, `cat ${file}`); return r.code === 0 ? JSON.parse(r.out) : null; };
+const readIn = async (m, file) => { const r = await inM(m, `cat ${file}`); return r.code === 0 ? JSON.parse(r.out) : null; };
 
 // ------------------------------------------------------------------ the test
 const A = { slugs: ["utility-invoice", "council-letter", "pay-slip", "water-invoice", "blurry-scan"] };
 
 async function partA() {
   section("A: a fresh server, the install line with all defaults (F1)");
-  check(machine("up", "a").code === 0, "machine A: a fresh Ubuntu server with Docker and a stand-in Godspeed");
-  const env = wire("a", S.drives.main);
+  check((await machine("up", "a")).code === 0, "machine A: a fresh Ubuntu server with Docker and a stand-in Godspeed");
+  const env = await wire("a", S.drives.main);
   const t0 = Date.now();
-  const inst = installLine("a");
+  const inst = await installLine("a");
   note(`the install line took ${Math.round((Date.now() - t0) / 1000)} s`);
   check(inst.code === 0, `the install line ends without an error${inst.code ? `: ${inst.all.slice(-800)}` : ""}`);
   check(/Paperless runs at https:\/\/srv-a\.clerk\.test:48444/.test(inst.out), "it says where Paperless runs");
-  const login = readIn("a", "/var/lib/godspeed/clerk/login.json");
+  const login = await readIn("a", "/var/lib/godspeed/clerk/login.json");
   A.login = login;
   const p = phone("a");
   const u = await p.req("GET", "/api/ui_settings/");
@@ -218,24 +230,24 @@ async function partA() {
   check(JSON.stringify(types) === JSON.stringify([...STARTERS.english.types].sort()), `F1: the starter document types in English (${types.join(", ")})`);
   const y = new Date().getFullYear();
   check(tags.find((t) => t.name === "Inbox")?.is_inbox_tag && [`Tax ${y - 1}`, "Health", "Important", "Check this", "Not in notebook"].every((n) => tags.some((t) => t.name === n)), `F1: the starter tags, the inbox tag first (${tags.map((t) => t.name).join(", ")})`);
-  const st = clerk("a", "status", env);
+  const st = await clerk("a", "status", env);
   check(/Restore copy: every night after 02:00/.test(st.out), "F1: the nightly restore copy is scheduled");
-  const img = inM("a", "docker inspect godspeed-clerk-paperless-webserver-1 --format '{{.Config.Image}} {{.HostConfig.Memory}}'").out.trim();
+  const img = (await inM("a", "docker inspect godspeed-clerk-paperless-webserver-1 --format '{{.Config.Image}} {{.HostConfig.Memory}}'")).out.trim();
   check(/paperless-ngx:3\.3\.3@sha256:dba0242c/.test(img) && / 1677721600$/.test(img), `F1: the pinned, tested version with a memory limit (${img})`);
   const outside = await new Promise((r) => { const c = http.get({ host: ipOf("a"), port: 8010, path: "/", timeout: 4000 }, () => r("open")); c.on("error", (e) => r(e.code)); c.on("timeout", () => { c.destroy(); r("timeout"); }); });
   check(outside !== "open", `section 5: nothing but the HTTPS address answers a stranger (Paperless's own port: ${outside})`);
 
   section("A: the drive, the plan, the phone (F2)");
-  for (const [k, v] of [["about", KIT.profile], ["country", KIT.country], ["interval_minutes", "1"], ["talk", '["telegram"]']]) clerk("a", `settings ${k} '${String(v).replace(/'/g, "'\\''")}'`, env);
+  for (const [k, v] of [["about", KIT.profile], ["country", KIT.country], ["interval_minutes", "1"], ["talk", '["telegram"]']]) await clerk("a", `settings ${k} '${String(v).replace(/'/g, "'\\''")}'`, env);
   const fin = await connectDrive("a", env);
   check(fin.code === 0 && /Connected to the drive/.test(fin.out), "Google Drive connected (the pretend one)");
-  clerk("a", 'drive folder "Paperwork"', env);
-  const prop = clerk("a", "plan propose", env);
+  await clerk("a", 'drive folder "Paperwork"', env);
+  const prop = await clerk("a", "plan propose", env);
   note(prop.out.split("\n").slice(0, 8).join(" | "));
-  const conf = clerk("a", "plan confirm", env);
+  const conf = await clerk("a", "plan confirm", env);
   check(conf.code === 0, "the folder plan confirmed");
-  check(clerk("a", "resume", env).code === 0, "the Clerk resumed");
-  const ph = clerk("a", "phone", env);
+  check((await clerk("a", "resume", env)).code === 0, "the Clerk resumed");
+  const ph = await clerk("a", "phone", env);
   check(/Swift Paperless/.test(ph.out) && ph.out.includes(login.password) && ph.out.includes("https://srv-a.clerk.test:48444") && /second factor/.test(ph.out), "F2: the address, the login and the second factor, for the chat");
   const p2 = await p.signIn(login.user, login.password, login.secret);
   await uploadKit(p, p2.body.token, A.slugs);
@@ -263,14 +275,14 @@ async function partA() {
   check(!!sortMsg && /https:\/\/srv-a\.clerk\.test:48444\/view\/\d+/.test(sortMsg), `F16, F19: the paper to sort is told with the To sort page's HTTPS link (${(sortMsg || "").replace(/\n/g, " | ")})`);
 
   section("A: a Godspeed update rewrites its own Caddyfile; the Clerk puts Paperless's address back (F3)");
-  inM("a", "f=/root/godspeed/.godspeed/integrated-runtime/https/Caddyfile; awk '/^# Paperless-ngx/{exit} {print}' $f > $f.new && mv $f.new $f && systemctl restart godspeed-https");
+  await inM("a", "f=/root/godspeed/.godspeed/integrated-runtime/https/Caddyfile; awk '/^# Paperless-ngx/{exit} {print}' $f > $f.new && mv $f.new $f && systemctl restart godspeed-https");
   const gone = await p.req("GET", "/api/ui_settings/").then((r) => r.status, (e) => e.code);
-  const heal = clerk("a", "paperless check", env);
+  const heal = await clerk("a", "paperless check", env);
   const back = await waitFor("the address back", () => p.req("GET", "/api/ui_settings/").then((r) => r.status === 401, () => false), { minutes: 2, every: 3000 });
   check(gone !== 401 && /web address was gone from Caddy and is back/.test(heal.out) && back, `the address went away (${gone}), the check put it back, and it answers again`);
 
   section("A: the restore copy (F9)");
-  const cp = clerk("a", "copy", env);
+  const cp = await clerk("a", "copy", env);
   check(cp.code === 0 && /restore copy is whole/.test(cp.out), `the copy: ${cp.out.trim()}`);
   const D = S.drives.main;
   const restore = JSON.parse(D.byPath("The Clerk/paperless/restore.json")?.content?.toString() || "{}");
@@ -278,12 +290,12 @@ async function partA() {
   check(!!D.byPath("The Clerk/paperless/manifest.json") && !!D.byPath("The Clerk/records/clerk-records.json") && filesOf(D).filter((f) => D.pathOf(f.id).startsWith("The Clerk/paperless/originals/")).length === A.slugs.length, "the export (originals, manifest) and the Clerk's records are in its own folder");
   check(filesOf(D).every((f) => /^(Paperwork|The Clerk|Holiday photos)\//.test(D.pathOf(f.id))), "nothing written outside the documents folder and the Clerk's own folder");
   const w0 = D.writes.length;
-  const again = clerk("a", "copy", env);
+  const again = await clerk("a", "copy", env);
   const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/(originals|archive)\//.test(p));
   check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.out.trim()})`);
   A.restoreAt = restore.made_at;
   A.snapshot = await snapshotOf(p, A.tok);
-  A.plan = readIn("a", "/var/lib/godspeed/clerk/plan.json");
+  A.plan = await readIn("a", "/var/lib/godspeed/clerk/plan.json");
   A.counts = { files: markedFiles(D).length, notes: (await S.notes()).length, items: (await S.items()).length, deadlines: (await S.deadlines()).length };
   note(`A holds ${A.snapshot.length} documents; the drive ${A.counts.files} filed files, the notebook ${A.counts.notes} notes, ${A.counts.items} items, ${A.counts.deadlines} deadlines`);
 
@@ -291,14 +303,14 @@ async function partA() {
   await p.req("POST", "/api/users/", { body: { username: "sam", password: "a-made-up-password-for-sam", is_superuser: false, is_active: true }, headers: { Authorization: `Token ${A.tok}` } });
   const sam = await p.signIn("sam", "a-made-up-password-for-sam");
   await uploadKit(p, sam.body.token, ["second-account-letter"], 30);
-  const shared = clerk("a", "copy", env);
+  const shared = await clerk("a", "copy", env);
   check(/another account keeps documents/.test(shared.out), `the export stops: ${shared.out.trim()}`);
   check(JSON.parse(D.byPath("The Clerk/paperless/restore.json").content.toString()).made_at === A.restoreAt, "the restore copy in the drive is the one from before");
   const samId = (await p.all(A.tok, "/api/documents/?page_size=100&fields=id,owner,original_file_name")).find((d) => /16-17-30/.test(d.original_file_name))?.id;
   check(!!samId && !markedFiles(D).some((f) => f.appProperties.clerkDoc === String(samId)) && !filesOf(D).some((f) => /16-17-30/.test(f.name)), "nothing of that account reaches the drive");
   const sharedMsg = await waitFor("the shared message", () => S.sent.find((m) => /another account/.test(m)), { minutes: 4 });
   check(!!sharedMsg && S.sent.filter((m) => /another account/.test(m)).length === 1, "the person hears it once");
-  machine("down", "a");
+  await machine("down", "a");
   note("machine A thrown away");
 }
 
@@ -311,13 +323,13 @@ async function snapshotOf(p, tok) {
 
 async function partB() {
   section("B: a fresh server rebuilt from the drive (F9)");
-  check(machine("up", "b").code === 0, "machine B: a fresh server");
-  const env = wire("b", S.drives.main);
-  const inst = installLine("b");
+  check((await machine("up", "b")).code === 0, "machine B: a fresh server");
+  const env = await wire("b", S.drives.main);
+  const inst = await installLine("b");
   check(inst.code === 0, `the install line on B (an empty Paperless)${inst.code ? `: ${inst.all.slice(-600)}` : ""}`);
   const fin = await connectDrive("b", env);
   check(/restore copy of a Paperless the Clerk installed/.test(fin.out), `connecting the drive offers the rebuild (${fin.out.split("\n").pop()})`);
-  const r = clerk("b", "restore", env);
+  const r = await clerk("b", "restore", env);
   note(r.all.trim().split("\n").join(" | ").slice(0, 900));
   check(r.code === 0 && /Paperless is rebuilt/.test(r.out), "godspeed-clerk restore rebuilds Paperless");
   check(/Paperless 3\.3\.3 starting empty/.test(r.out), "the version that made the export first");
@@ -329,34 +341,34 @@ async function partB() {
   const snap = await snapshotOf(p, s.body.token);
   check(JSON.stringify(snap) === JSON.stringify(A.snapshot), `every document, title, tag and date of the original (${snap.length} of ${A.snapshot.length})`);
   if (JSON.stringify(snap) !== JSON.stringify(A.snapshot)) note(`B: ${JSON.stringify(snap).slice(0, 400)} / A: ${JSON.stringify(A.snapshot).slice(0, 400)}`);
-  check(JSON.stringify(readIn("b", "/var/lib/godspeed/clerk/plan.json")?.rules) === JSON.stringify(A.plan?.rules), "the confirmed folder plan");
-  const st = clerk("b", "status", env);
+  check(JSON.stringify((await readIn("b", "/var/lib/godspeed/clerk/plan.json"))?.rules) === JSON.stringify(A.plan?.rules), "the confirmed folder plan");
+  const st = await clerk("b", "status", env);
   note(st.out.split("\n").slice(0, 6).join(" | "));
   // The next runs (the worker's, and two more by hand).
   await sleep(90000);
-  for (let i = 0; i < 2; i++) clerk("b", "run", env);
+  for (let i = 0; i < 2; i++) await clerk("b", "run", env);
   const D = S.drives.main;
   const counts = { files: markedFiles(D).length, notes: (await S.notes()).length, items: (await S.items()).length, deadlines: (await S.deadlines()).length };
   check(JSON.stringify(counts) === JSON.stringify(A.counts), `its next runs make no second file, note, collection item or deadline (${JSON.stringify(counts)})`);
   const v = await p.req("GET", "/api/ui_settings/", { headers: { Authorization: `Token ${s.body.token}` } });
   check(v.body.settings?.version === "3.3.3", `Paperless ${v.body.settings?.version} on B`);
-  machine("down", "b");
+  await machine("down", "b");
   note("machine B thrown away");
 }
 
 async function partC() {
   section("C: Paperless 3.2.1 in German; an update forced to fail after it changed the database (F3)");
-  check(machine("up", "c").code === 0, "machine C: a fresh server");
-  const env = wire("c", S.drives.other);
-  const inst = installLine("c", "--language German --paperless-version 3.2.1", { GODSPEED_CLERK_TEST: "1" });
+  check((await machine("up", "c")).code === 0, "machine C: a fresh server");
+  const env = await wire("c", S.drives.other);
+  const inst = await installLine("c", "--language German --paperless-version 3.2.1", { GODSPEED_CLERK_TEST: "1" });
   check(inst.code === 0, `installed Paperless 3.2.1 (the tests' earlier version)${inst.code ? `: ${inst.all.slice(-600)}` : ""}`);
-  const login = readIn("c", "/var/lib/godspeed/clerk/login.json");
+  const login = await readIn("c", "/var/lib/godspeed/clerk/login.json");
   const p = phone("c");
   const tok = (await p.signIn(login.user, login.password, login.secret)).body.token;
   const types = (await p.all(tok, "/api/document_types/?page_size=100")).map((x) => x.name).sort();
   const tags = (await p.all(tok, "/api/tags/?page_size=100")).map((x) => x.name);
   check(JSON.stringify(types) === JSON.stringify([...STARTERS.german.types].sort()) && ["Posteingang", "Prüfen", "Wichtig", "Nicht ins Notizbuch", `Steuer ${new Date().getFullYear() - 1}`].every((n) => tags.includes(n)), `F1: the starter set in German (${types.slice(0, 4).join(", ")}, ...; ${tags.slice(0, 5).join(", ")}, ...)`);
-  const ocr = inM("c", "grep PAPERLESS_OCR_LANGUAGE: /opt/godspeed-clerk/paperless/compose.yaml").out.trim();
+  const ocr = (await inM("c", "grep PAPERLESS_OCR_LANGUAGE: /opt/godspeed-clerk/paperless/compose.yaml")).out.trim();
   check(/deu\+eng/.test(ocr), `text reading in German and English (${ocr})`);
   await connectDrive("c", env);
   await uploadKit(p, tok, ["utility-invoice", "council-letter", "doctor-letter"]);
@@ -369,48 +381,81 @@ async function partC() {
     }
     return JSON.stringify(out);
   };
-  const migrations = () => inM("c", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless exec -T db psql -U paperless -tAc \"select count(*) || ' ' || string_agg(app || '.' || name, ',' order by id) from django_migrations\"").out.trim();
-  const before = { sums: await sums(), mig: migrations() };
+  const migrations = async () => (await inM("c", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless exec -T db psql -U paperless -tAc \"select count(*) || ' ' || string_agg(app || '.' || name, ',' order by id) from django_migrations\"")).out.trim();
+  const before = { sums: await sums(), mig: await migrations() };
   check(Object.keys(JSON.parse(before.sums)).length === 3 && Object.values(JSON.parse(before.sums)).every((x) => x[0] === 200 && x[2] === 200), "three documents, each original and searchable PDF downloads");
-  const fail = clerk("c", "paperless update", env, { GODSPEED_CLERK_TEST_FAIL_UPDATE: "after-start" });
+  const fail = await clerk("c", "paperless update", env, { GODSPEED_CLERK_TEST_FAIL_UPDATE: "after-start" });
   note(fail.all.trim().split("\n").join(" | "));
-  const log = inM("c", "grep 'update:' /var/lib/godspeed/clerk/clerk.log").out;
+  const log = (await inM("c", "grep 'update:' /var/lib/godspeed/clerk/clerk.log")).out;
   check(/Paperless 3\.3\.3 is not healthy \(the test made this update fail after the new version had started\)/.test(log), "the new version started and ran its migrations before the update was made to fail");
   check(fail.code !== 0 && /runs again with its database, settings and documents as before/.test(fail.err + fail.out), "the update reports it put everything back");
   const v1 = await p.req("GET", "/api/ui_settings/", { headers: { Authorization: `Token ${tok}` } });
-  const img1 = inM("c", "docker inspect godspeed-clerk-paperless-webserver-1 --format '{{.Config.Image}}'").out.trim();
+  const img1 = (await inM("c", "docker inspect godspeed-clerk-paperless-webserver-1 --format '{{.Config.Image}}'")).out.trim();
   check(v1.body.settings?.version === "3.2.1" && /:3\.2\.1@sha256:5fa76604/.test(img1), `F3: on the previous version (${v1.body.settings?.version}, ${img1.split("@")[0]})`);
-  check(migrations() === before.mig, `F3: with the previous database (${before.mig.split(" ")[0]} migrations, the same ones)`);
+  check(await migrations() === before.mig, `F3: with the previous database (${before.mig.split(" ")[0]} migrations, the same ones)`);
   check(await sums() === before.sums, "F3: every document present and readable, byte for byte");
-  check(inM("c", "ls /opt/godspeed-clerk/paperless/backups").out.includes("before-3.3.3"), "the copy taken before the update is kept");
-  const ok = clerk("c", "paperless update", env);
+  check((await inM("c", "ls /opt/godspeed-clerk/paperless/backups")).out.includes("before-3.3.3"), "the copy taken before the update is kept");
+  const ok = await clerk("c", "paperless update", env);
   check(ok.code === 0 && /Paperless 3\.3\.3 runs/.test(ok.out), `the update to 3.3.3 (${ok.out.trim().split("\n").pop()})`);
-  const after = migrations();
-  check(Number(after.split(" ")[0]) === Number(before.mig.split(" ")[0]) + 3, `its migrations ran (${before.mig.split(" ")[0]} to ${after.split(" ")[0]})`);
+  const after = await migrations();
+  check(Number(after.split(" ")[0]) > Number(before.mig.split(" ")[0]) && /documents\.0027_documentbarcode/.test(after), `its migrations ran (${before.mig.split(" ")[0]} to ${after.split(" ")[0]}, documents.0027 among them)`);
   check(await sums() === before.sums, "every document present and readable after the update");
   section("C: a stopped Paperless (F3)");
-  inM("c", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless stop webserver");
+  await inM("c", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless stop webserver");
   const down = await p.req("GET", "/api/ui_settings/").then((r) => r.status, (e) => e.code);
-  const chk = clerk("c", "paperless check", env);
+  const chk = await clerk("c", "paperless check", env);
   const up = await waitFor("Paperless back", () => p.req("GET", "/api/ui_settings/").then((r) => r.status === 401, () => false), { minutes: 4, every: 5000 });
   check(down !== 401 && /started again/.test(chk.out) && up, `stopped (${down}), it runs again on the next check`);
-  if (!process.env.E2E_KEEP) { machine("down", "c"); note("machine C thrown away"); }
+  if (!process.env.E2E_KEEP) { await machine("down", "c"); note("machine C thrown away"); }
 }
 
 async function partD() {
   section("D: a server below the minimum (F1)");
-  check(machine("up", "d", "--memory", "1g").code === 0, "machine D: a fresh server with 1 GB of memory");
-  const inst = installLine("d");
+  check((await machine("up", "d", "--memory", "1g")).code === 0, "machine D: a fresh server with 1 GB of memory");
+  const inst = await installLine("d");
   note(inst.all.trim().split("\n").slice(-6).join(" | "));
   check(inst.code !== 0 && /Paperless was not installed, because/.test(inst.all) && /GB of memory free; Paperless needs 1\.5 GB/.test(inst.all), "it stops before installing and names the missing memory");
-  check(inM("d", "test -e /opt/godspeed-clerk || echo none").out.trim() === "none" && inM("d", "docker ps -aq | wc -l").out.trim() === "0", "nothing was installed: no folder, no container");
-  if (!process.env.E2E_KEEP) { machine("down", "d"); note("machine D thrown away"); }
+  check((await inM("d", "test -e /opt/godspeed-clerk || echo none")).out.trim() === "none" && (await inM("d", "docker ps -aq | wc -l")).out.trim() === "0", "nothing was installed: no folder, no container");
+  if (!process.env.E2E_KEEP) { await machine("down", "d"); note("machine D thrown away"); }
+}
+
+// --serve: only what outlives a machine, for working by hand (a reviewer, a person): the services,
+// and a small page of what they hold, on http://10.89.0.1:48904 (/drive, /drive-other, /telegram,
+// /notebook). Wire a machine to them with: test/machine/machine.sh wire <letter> [other].
+async function serve() {
+  await machine("net");
+  await startServices();
+  const control = http.createServer(async (req, res) => {
+    const json = (o) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(o, null, 1)); };
+    const drive = (d) => d.files().map((f) => ({ path: d.pathOf(f.id), folder: f.mimeType === "application/vnd.google-apps.folder" || undefined, trashed: f.trashed || undefined, clerk: f.appProperties?.clerkDoc ? `doc ${f.appProperties.clerkDoc}` : f.appProperties?.clerkCopy ? "restore copy" : undefined }));
+    try {
+      if (req.url === "/drive") return json(drive(S.drives.main));
+      if (req.url === "/drive-other") return json(drive(S.drives.other));
+      if (req.url === "/telegram") return json(S.sent);
+      if (req.url === "/notebook") return json({ notes: (await S.notes()).map((n) => ({ title: n.title, doc: n.clerk_doc })), items: (await S.items()).length, deadlines: await S.deadlines() });
+      if (req.url?.startsWith("/consent?")) { const link = decodeURIComponent(req.url.slice(9)); const r = await fetch(link, { redirect: "manual" }); return json({ address: r.headers.get("location") }); }
+    } catch (e) { res.writeHead(500); return res.end(String(e.message)); }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((r) => control.listen(48904, HOST, r));
+  console.log([
+    "Running, until stopped:",
+    `  the pretend Google Drive (account ${KIT.drive.account}, documents folder "Paperwork"):  ${S.drives.main.url}`,
+    `  a second pretend drive (kim@example.test, folder "Papers"):  ${S.drives.other.url}`,
+    `  the Godspeed notebook:  ${S.nb}`,
+    `  the pretend Telegram:  http://${HOST}:48902`,
+    `  the install line's files:  http://${HOST}:48903/install.sh and /godspeed-clerk.tar.gz`,
+    `  what they hold:  http://${HOST}:48904/drive, /drive-other, /telegram, /notebook`,
+    `  Google's consent, pressed for you:  http://${HOST}:48904/consent?<the link drive connect printed, URL-encoded>`,
+  ].join("\n"));
+  await new Promise(() => {});
 }
 
 async function main() {
-  if (!fs.existsSync(path.join(RENDERED, "utility-invoice.pdf"))) { const r = sh("python3", [path.join(ROOT, "test", "kit", "render.py"), RENDERED]); if (r.code) throw new Error(`the kit could not be rendered: ${r.all || r.err}`); }
+  if (process.argv.includes("--serve")) return serve();
+  if (!fs.existsSync(path.join(RENDERED, "utility-invoice.pdf"))) { const r = await sh("python3", [path.join(ROOT, "test", "kit", "render.py"), RENDERED]); if (r.code) throw new Error(`the kit could not be rendered: ${r.all || r.err}`); }
   if (!fs.existsSync(path.join(WORK, "godspeed-clerk.tar.gz"))) throw new Error("test/machine/.work/godspeed-clerk.tar.gz: build it first (README)");
-  machine("net");
+  await machine("net");
   await startServices();
   try {
     if (ONLY.has("a")) await partA();
