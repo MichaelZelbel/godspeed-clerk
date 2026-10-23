@@ -109,7 +109,8 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
     notes: () => nb.rows("notes").filter((n) => n.source_app === SOURCE),
     notesOf: (slug) => world.notes().filter((n) => n.clerk_doc === ids[slug]),
     noteOf: (slug) => { const n = world.notesOf(slug); if (n.length !== 1) throw new Error(`${slug} has ${n.length} notes`); return n[0]; },
-    close: async () => { await pl.close(); await drive.close(); await nb.close(); },
+    // Everything this world made goes with it, its state folder too.
+    close: async () => { await pl.close(); await drive.close(); await nb.close(); fs.rmSync(dir, { recursive: true, force: true }); },
   };
   return world;
 }
