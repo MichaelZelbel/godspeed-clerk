@@ -87,3 +87,23 @@ test("under node --test the default notebook door and real channels are never us
   const named = buildContext(statePaths(tmp()), { env: { GODSPEED_CLERK_NOTEBOOK: "http://127.0.0.1:9" } });
   assert.equal(named.notebook.base, "http://127.0.0.1:9");
 });
+
+test("settings: batch 3 texts, and the clock a test may set", async () => {
+  const { loadSettings } = await import("../lib/core/settings.mjs");
+  const { buildContext } = await import("../lib/core/context.mjs");
+  const { statePaths } = await import("../lib/core/paths.mjs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-settings-"));
+  try {
+    const s = loadSettings(statePaths(dir));
+    assert.equal(s.texts.deadlines, "Deadlines");
+    assert.equal(s.texts.deadline_title_check, "{ask} (check the date)");
+    assert.equal(s.texts.deadline_title_kept, "{title}, {date}");
+    assert.match(s.texts.message_deadline_check, /\{list\}/);
+    assert.match(s.texts.message_nodate, /\{list\}/);
+    // The clock: only in test mode, and only a real day.
+    const day = (env) => { const t = buildContext(statePaths(dir), { env }).today; return t.toISOString().slice(0, 10); };
+    assert.equal(day({ GODSPEED_CLERK_TEST: "1", GODSPEED_CLERK_TODAY: "2026-10-22" }), "2026-10-22");
+    assert.equal(day({ GODSPEED_CLERK_TODAY: "2026-10-22" }), new Date().toISOString().slice(0, 10), "outside test mode the real day");
+    assert.equal(day({ GODSPEED_CLERK_TEST: "1", GODSPEED_CLERK_TODAY: "2026-02-30" }), new Date().toISOString().slice(0, 10), "not a real day: the real day");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

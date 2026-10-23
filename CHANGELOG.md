@@ -1,5 +1,26 @@
 # Changes
 
+## 0.3.0 (third batch, private trial)
+
+- Deadlines from letters (F15): each request with a date becomes a Godspeed deadline, which
+  Godspeed reminds about like any other, named by what it asks and linked to the document. A
+  written date as written; a period from the day the letter prints; from a day it does not
+  print, counted from its own date and marked "check the date". No date to count from: "Check
+  this" and a message asking for it. Vague: into the key facts. Already passed: into the key
+  facts. Each made once; once the person changed or closed one, never changed again; a corrected
+  letter date moves an untouched one. "Important" while a day is ahead, when Godspeed sorts.
+  A period before a printed date counts back from it; a date without a year is the next one after
+  the letter's date; a time limit the AI could not read is asked for in its own words, never
+  filed as vague.
+- A paper sorted just before a crash is filed as if the run had not stopped: the sorting decision
+  (a new sender's new folder too) is recorded before Paperless is changed (F18).
+- A "Not in notebook" letter's deadline is named only by its title and date.
+- The note shows its deadlines; the item's Deadlines column shows each day; the one message per
+  run names deadlines to check and letters with no date to count from.
+- Papers noted before get their deadlines read once, in batches, never sorted or filed again.
+- Needs a Godspeed with add-on deadlines (product discussion #27); an older one gets one message
+  and the deadlines come after its update.
+
 ## 0.2.1
 
 - Every note is for search, not for the notebook's own processing (`skip_processing`): Godspeed

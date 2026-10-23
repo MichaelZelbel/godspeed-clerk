@@ -34,12 +34,13 @@ test("F17: after a run over the kit, the collection has one item per document wi
       assert.equal(it.data.type, (e.document_type ?? w.typeName(d)) ?? "", `${slug}: type`);
       assert.equal(it.data.date, e.created ?? d.created, `${slug}: date`);
       for (const t of e.tags_include || []) assert.ok(it.data.tags.split(", ").includes(t), `${slug}: tag ${t}`);
-      assert.equal(it.data.status, e.check ? "check this" : "sorted", `${slug}: status`);
+      assert.equal(it.data.status, e.status || (e.check ? "check this" : "sorted"), `${slug}: status`);
       assert.equal(it.data.in_drive, true, `${slug}: in drive`);
       assert.equal(it.data.note, `https://notebook.example/dashboard/notes/${w.noteOf(slug).id}`, `${slug}: note link`);
       assert.equal(it.data.paperless, `${w.pl.url}/documents/${w.ids[slug]}/details`, `${slug}: Paperless link`);
       assert.equal(it.data.drive, `https://drive.google.com/file/d/${w.fileOf(slug)[0].id}/view`, `${slug}: drive link`);
-      assert.equal(it.data.deadlines, undefined, "deadlines come with the next version");
+      // F17 and F15: its deadlines, as the expected-result file says (none: empty).
+      assert.equal(it.data.deadlines, e.item_deadlines ?? "", `${slug}: deadlines`);
     }
   } finally { await w.close(); }
 });

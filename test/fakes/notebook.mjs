@@ -8,6 +8,10 @@
 // - a delete sets removed_at, and the row is gone from every read;
 // - note defaults (is_trashed false, folder_path ""), a collection's slug made from its name, an
 //   item's title from the collection's primary field.
+// - the add-on deadlines of the product's POST /api/functions/addon-deadlines (core/addon-deadlines.mjs
+//   and tools/due.js there): list, create once per key, update only while the person has not
+//   touched one (changed its title or a date, closed or dropped it); `withoutDeadlines` answers as a
+//   Godspeed from before them.
 // `down = true` drops every connection, as a stopped notebook would.
 import http from "node:http";
 import crypto from "node:crypto";
@@ -19,7 +23,46 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
   const tables = { notes: new Map(), collections: new Map(), collection_items: new Map() };
   const writes = [];
   let n = 1;
-  const fb = { down: false };
+  const fb = { down: false, withoutDeadlines: false };
+  // Add-on deadlines, by "<addon> <key>": what the add-on wrote (`wrote`) against what is there now.
+  const due = new Map();
+  const realDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+  const print = (d) => JSON.stringify([d.title, d.start, d.due]);
+  const shown = (d) => ({ key: d.key, slug: d.slug, title: d.title, due: d.due, start: d.start, state: d.state, touched: d.state !== "open" || print(d) !== d.wrote, closed_on: d.closed_on || null, link: d.link || null });
+  const refuse = (m) => { throw Object.assign(new Error(m), { status: 400 }); };
+  function deadlines(body) {
+    if (fb.withoutDeadlines) refuse("Processing function has not been ported: addon-deadlines");
+    const addon = String(body.addon || "");
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(addon)) refuse("Give the add-on's name");
+    const mine = () => [...due.values()].filter((d) => d.addon === addon);
+    if (body.action === "list") return { deadlines: mine().map(shown) };
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:#/-]{0,119}$/.test(String(body.key || ""))) refuse("Give the add-on's own key");
+    const id = `${addon} ${body.key}`;
+    if (body.action === "update") {
+      const d = due.get(id);
+      if (!d) refuse("No deadline of this add-on has that key.");
+      if (body.due != null && !realDay(body.due)) refuse("The deadline needs a real day");
+      if (shown(d).touched) return { updated: false, touched: true, deadline: shown(d) };
+      if (body.due) { d.due = body.due; if (d.start > d.due) d.start = d.due; }
+      if (body.title) d.title = String(body.title).trim();
+      d.wrote = print(d);
+      writes.push({ table: "deadlines", operation: "update", id });
+      return { updated: true, deadline: shown(d) };
+    }
+    if (body.action !== "create") refuse("The action is list, create or update.");
+    const title = String(body.title || "").trim();
+    if (!title || /[\r\n]/.test(title) || title.length > 300) refuse("Say what needs doing, in one line.");
+    if (!realDay(body.due)) refuse("The deadline needs a real day");
+    for (const k of ["done_when", "cost"]) if (!String(body[k] || "").trim() || /[\r\n]/.test(body[k])) refuse(`Say ${k} in one line.`);
+    if (body.link && !/^https?:\/\/\S+$/.test(body.link)) refuse("The link is an http or https address.");
+    if (due.has(id)) return { created: false, deadline: shown(due.get(id)) };
+    const d = { addon, key: body.key, slug: `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50)}-${due.size + 1}`, title, due: body.due,
+      start: body.start || "2026-10-22", state: "open", link: body.link || null, done_when: body.done_when, cost: body.cost };
+    d.wrote = print(d);
+    due.set(id, d);
+    writes.push({ table: "deadlines", operation: "insert", id });
+    return { created: true, deadline: shown(d) };
+  }
 
   const seal = (row) => { row._hash = hashOf(row); return row; };
   const visible = (t) => [...tables[t].values()].filter((r) => !r.removed_at);
@@ -93,6 +136,7 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
           return send(200, { jsonrpc: "2.0", id: body.id, result: { content: [{ type: "text", text: JSON.stringify({ link: `${web}/dashboard` }) }] } });
         }
         if (req.url === "/api/query" && req.method === "POST") return send(200, { data: execute(JSON.parse(raw)), error: null });
+        if (req.url === "/api/functions/addon-deadlines" && req.method === "POST") return send(200, { data: deadlines(JSON.parse(raw)), error: null });
         return send(404, { error: "Unknown operation" });
       } catch (e) { return send(e.status || 500, { error: e.message, code: e.code }); }
     });
@@ -101,6 +145,13 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
   return {
     url: `http://127.0.0.1:${server.address().port}`, web, writes,
     get down() { return fb.down; }, set down(v) { fb.down = !!v; },
+    get withoutDeadlines() { return fb.withoutDeadlines; }, set withoutDeadlines(v) { fb.withoutDeadlines = !!v; },
+    // Every add-on deadline, with all it holds; and what the person does to one in Godspeed.
+    deadlineRows: () => [...due.values()].map((d) => ({ ...shown(d), addon: d.addon, done_when: d.done_when, cost: d.cost })),
+    clearDeadlines: () => due.clear(),
+    personMoves: (key, day, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).due = day; },
+    personRenames: (key, title, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).title = title; },
+    personCloses: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "closed"; d.closed_on = "2026-10-23"; },
     rows: (t) => visible(t).map((r) => structuredClone(r)),
     row: (t, id) => { const r = tables[t].get(id); return r && !r.removed_at ? structuredClone(r) : null; },
     // What the person does in the notebook's own screens: a save with the version they had.

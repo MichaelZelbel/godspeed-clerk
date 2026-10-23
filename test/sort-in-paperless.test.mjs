@@ -211,3 +211,17 @@ test("a folder never becomes a sender: picked for a paper whose sender the AI ca
     assert.ok(!readJson(w.paths.plan).rules.some((r) => r.sender), "nothing learned");
   } finally { await w.close(); }
 });
+
+test("a paper the AI is unsure of is on the To sort page at once, also while Google Drive is away", async () => {
+  const w = await kitWorld({ only: ["utility-invoice"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    w.drive.revoke();
+    addPaper(w, "blurry-late", 53, "Pinecrest Dental Practice. Your next dental check-up is due in October 2025. Please call us to book a time that suits you. Kind regards.", "50");
+    await w.run();
+    assert.ok(w.tagNames(w.doc("blurry-late")).includes("Check this"));
+    assert.deepEqual(w.pl.viewDocs(view(w).id), [53], "on the page, though its file is not in the drive yet");
+    const patches = w.pl.writes.filter((x) => x.path === "/api/documents/53/");
+    assert.equal(patches.length, 1, "in the same update that sorted it");
+  } finally { await w.close(); }
+});

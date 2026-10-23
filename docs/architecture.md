@@ -16,6 +16,8 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `note.mjs` | The text of a note: the Clerk's part, and where the person's own lines begin. |
 | `notes.mjs` | The note step: one note per document, the summary, "Not in notebook". |
 | `documents.mjs` | The "Documents" collection: one item per document. |
+| `deadlines.mjs` | A letter's requests: what the AI read, checked; the dates counted (never by the AI). |
+| `deadline-step.mjs` | The deadlines in Godspeed: made once per request, the person's once touched, "Important". |
 | `notify.mjs` | One message per run for what the person can act on. |
 | `run.mjs` | One run: the steps over all documents, in batches and within a time limit. |
 | `records.mjs` | One record per document, the log, the outbox. |
@@ -40,6 +42,10 @@ file each, found by the registry). The work lives in `lib/core/`:
    `note_batch` (50) per run. A note is written again only when what it is made from changed.
    When the notebook does not answer, this part waits; after `notebook_down_hours` the person
    hears it once.
+   Then its deadlines (F15): each request with a day becomes a Godspeed deadline through the
+   product's add-on deadlines (`POST /api/functions/addon-deadlines` on the same door), listed
+   once per run. A step that changed the paper in Paperless ("Important", "Check this") is
+   followed by its note and item once more, so they say it in the same run.
 7. One message for what the person can act on: what is new in the outbox, no longer true or
    already said dropped, one link. While a pile still waits to be sorted, papers to check are held
    (at most a day) so they come together.
@@ -54,7 +60,9 @@ before it writes anywhere else, and records the result after. A step killed betw
 write and its record is completed by the next run from what it finds:
 
 - first copy: the file with the document's mark is found in the drive and checked;
-- sorting: the document no longer carries the inbox tag, so it is not sorted again;
+- sorting: the document no longer carries the inbox tag, so it is not sorted again, and the
+  decision the intent recorded right before Paperless was changed (folder, sender folder, the
+  date read) is kept;
 - filing: the file is already where the intent said.
 
 A file that is neither where the Clerk last put it nor where its intent said was moved or renamed
@@ -154,3 +162,40 @@ and a paper to check.
 
 Every write carries the version just read (`expected`), so a note or item the person saves at
 that moment is refused by the notebook and kept; the Clerk tries again next run.
+
+## Deadlines from letters
+
+The AI reads a letter's requests once: in the answer that sorts it, otherwise in the note's
+reading (the same request as the summary, so no extra call), and for a paper kept out of the
+notebook in a reading of its own. It says for each request what to do, a date the letter writes,
+or a period and what it counts from (the document's date, another printed date, or receipt). It
+never counts a date: `deadlines.mjs` does.
+
+- The day a period counts from is Paperless's date, unless that is the upload day nobody read
+  off the letter or set since the Clerk first saw the paper; then the date the AI read; else none.
+  A period before a printed date ("at the latest six weeks before the lease ends") counts back
+  from it. A date written without a year is the next such day on or after the letter's date. A
+  time limit the AI saw but could not give (no date, no period, not vague) is asked for, like a
+  period with no date to count from. A period from receipt (or any day the
+  letter does not print) counts from the letter's date, the earliest the day can be, marked
+  "check the date". No date to count from: no deadline, "Check this" and a message asking for it.
+- Months end on the same day number, or the month's last day (31 January plus a month is the end
+  of February). A day already passed when the letter is read is not made; it goes into the note's
+  key facts with the vague requests.
+- Each deadline's key is the document's mark and the request's number: Godspeed makes one per key
+  (the product's `tools/due.js`, `ADDON-KEY`), so a crash or lost records never make a second.
+  Lost records are rebuilt from the note's header (`clerk_asks`), else from the deadlines
+  Godspeed holds for the paper, and only then by reading it again.
+- Godspeed says whether the person touched a deadline (changed its name or a date, closed or
+  dropped it). Such a deadline is never moved or renamed by the Clerk again. A corrected letter
+  date moves an untouched one counted from it; a "Not in notebook" tag added later renames an
+  untouched one to the document's title and date (never a scan's file name, then "Letter", and
+  never the upload day, then the letter's date), and it follows them when they change.
+- The first reading stays the reading: once a note's header holds the requests, a letter read
+  again changes nothing, so each deadline stays on its own request whatever order a new answer
+  gives them in.
+- "Important" (when Godspeed sorts) while one of the paper's deadlines, as Godspeed has it now, is
+  today or later; taken off after only when the Clerk put it on; never again once the person took
+  it off or had set it themselves.
+- Papers noted before deadlines were read get one reading each, in the notes' batches; the
+  archive (sorted before the Clerk came) none.

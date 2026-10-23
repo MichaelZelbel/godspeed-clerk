@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { kitWorld, DOCS, expected } from "./kit-world.mjs";
+import { keyOf } from "../lib/core/deadlines.mjs";
 
 const ALEX = DOCS.filter((d) => d.owner === "alex").map((d) => d.slug);
 
@@ -39,7 +40,9 @@ function picture(w) {
     // Each pretend world has its own Paperless port and file checksums, so links and note ids differ.
     const same = (t) => t.replaceAll(w.pl.url, "PAPERLESS").replace(/clerk-[0-9a-f]{32}/g, "NOTE");
     return [slug, { title: d.title, created: d.created, sender: w.senderName(d), type: w.typeName(d), tags: w.tagNames(d), files: w.fileOf(slug).map((f) => w.drive.pathOf(f.id)).sort(),
-      notes: w.notesOf(slug).map((n) => same(n.content)).sort(), items: w.nb.rows("collection_items").filter((i) => i.source_id === sum).map((i) => same(JSON.stringify(i.data))) }];
+      notes: w.notesOf(slug).map((n) => same(n.content)).sort(), items: w.nb.rows("collection_items").filter((i) => i.source_id === sum).map((i) => same(JSON.stringify(i.data))),
+      // Its deadlines in Godspeed (F15), by which request, with their name and day.
+      deadlines: w.nb.deadlineRows().filter((d) => sum && d.key.startsWith(keyOf(sum, ""))).map((d) => [d.key.split("#")[1], d.title, d.due, d.touched]).sort() }];
   }));
 }
 
@@ -178,14 +181,17 @@ test("F18: killed after each step in turn, and once in the middle of an upload: 
       let seen = 0;
       return (p) => { if (p === point && ++seen === nth) { const e = new Error(`killed at ${point}`); e.name = "Killed"; throw e; } };
     };
-    for (const [point, nth] of [["after-copy", 2], ["mid-upload", 1], ["after-sort", 1], ["after-sort", 2], ["after-file", 1], ["after-file", 3], ["after-note", 1], ["after-note", 3], ["after-item", 1], ["after-item", 2]]) {
-      await assert.rejects(w.run({ crash: killed(point, nth), chunkSize: 1024 }), /killed/, point);
+    for (const [point, nth] of [["after-copy", 2], ["mid-upload", 1], ["after-sort", 1], ["after-sort", 2], ["after-file", 1], ["after-file", 3], ["after-note", 1], ["after-note", 3], ["after-item", 1], ["after-item", 2], ["after-deadline", 1], ["after-deadline", 3]]) {
+      // A deadline is made only once its letter is sorted, filed and noted: runs go on until then.
+      const go = point === "after-deadline" ? w.runUntilQuiet : w.run;
+      await assert.rejects(go({ crash: killed(point, nth), chunkSize: 1024 }), /killed/, point);
     }
     await w.runUntilQuiet();
     assert.deepEqual(picture(w), want);
     for (const slug of ALEX) assert.equal(w.fileOf(slug).length, 1, slug);
     for (const slug of ALEX) assert.equal(w.notesOf(slug).length, expected(slug).not_in_notebook ? 0 : 1, `${slug}: one note`);
     assert.equal(w.nb.rows("collection_items").length, ALEX.length, "one item per document");
+    assert.equal(w.nb.deadlineRows().length, ALEX.reduce((n, s) => n + (expected(s).deadlines || []).length, 0), "and its deadlines, each once");
   } finally { await w.close(); }
 });
 

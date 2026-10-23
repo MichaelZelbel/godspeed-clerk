@@ -168,3 +168,20 @@ test("F10, F11: setup says where notes travel, that the tag must be set first, a
     assert.match(r.out, /item in the collection "Documents"/);
   } finally { await pl.close(); }
 });
+
+test("F15: setup says a letter's deadline becomes a Godspeed deadline that Godspeed reminds about, and that one changed is the person's", async () => {
+  const pl = await startFakePaperless({ tags: [{ id: 1, name: "Inbox", is_inbox_tag: true }] });
+  try {
+    const r = await cli(["setup", "--paperless", pl.url, "--user", "alex", "--godspeed", workspace(), "--no-service", "--no-copy", "--state", tmp()], { env: { ...modelEnv(), PAPERLESS_PASSWORD: "pw" } });
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /Deadlines: a letter that asks you to do something by a date becomes a deadline in Godspeed, which reminds you as the day comes/);
+    assert.match(r.out, /check the date/);
+    assert.match(r.out, /Once you change or close such a deadline, it is yours/);
+  } finally { await pl.close(); }
+});
+
+test("the run's summary says how many deadlines were made", async () => {
+  const { summary } = await import("../lib/commands/run.mjs");
+  const line = summary({ copied: 0, sorted: 0, check: 0, filed: 0, noted: 1, deadlines: 2, progress: "5 of 5 sorted", notes_progress: "5 of 5 noted", waiting: 0, to_check: 0, notes: [] });
+  assert.ok(line.endsWith(" 2 deadline(s) made in Godspeed."), line);
+});

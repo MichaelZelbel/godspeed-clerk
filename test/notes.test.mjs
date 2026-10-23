@@ -37,7 +37,7 @@ test("F10: a run over the kit makes exactly one note per document", async () => 
     // No second AI call for a summary, and none for the archive.
     assert.equal(summaries(w), 0);
     assert.equal(w.noteOf("bank-certificate").clerk_summary ?? null, null);
-    assert.equal(w.notes().length, ALEX.length - 1);
+    assert.equal(w.notes().length, ALEX.filter((s) => !expected(s).not_in_notebook).length);
   } finally { await w.close(); }
 });
 
@@ -65,7 +65,7 @@ test("F10: a reinstall followed by a run makes no new notes", async () => {
   try {
     await w.runUntilQuiet();
     const before = w.notes().map((n) => `${n.id} ${n._hash}`).sort();
-    assert.equal(before.length, ALEX.length - 1);
+    assert.equal(before.length, ALEX.filter((s) => !expected(s).not_in_notebook).length);
     const inserts = () => w.nb.writes.filter((x) => x.table === "notes" && x.operation === "insert").length;
     const made = inserts();
     fs.rmSync(w.paths.records, { recursive: true, force: true });

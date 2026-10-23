@@ -63,3 +63,38 @@ test("down: NotebookDown, answers() false", async () => {
     await assert.rejects(nb.note("clerk-abc"), (e) => e instanceof NotebookDown);
   } finally { await fake.close(); }
 });
+
+// Deadlines an add-on keeps (the product's POST /api/functions/addon-deadlines, discussion #27):
+// made once per key, listed, changed only while the person has not touched them.
+test("deadlines: made once per key, listed, changed only while nobody touched them", async () => {
+  const fake = await startFakeNotebook();
+  try {
+    const nb = new Notebook({ base: fake.url });
+    const one = { key: "ab12#1", title: "Pay the made-up water bill", due: "2026-11-20", done_when: "Paid.", cost: "A fee.", link: "http://paperless.example/documents/7/details" };
+    const made = await nb.deadlines({ action: "create", ...one });
+    assert.equal(made.created, true);
+    assert.equal(made.deadline.due, "2026-11-20");
+    const again = await nb.deadlines({ action: "create", ...one, due: "2026-12-01" });
+    assert.equal(again.created, false);
+    assert.equal(again.deadline.due, "2026-11-20");
+    assert.equal(fake.deadlineRows().length, 1);
+    assert.equal(fake.deadlineRows()[0].addon, "godspeed-clerk", "the client names the Clerk");
+    const moved = await nb.deadlines({ action: "update", key: "ab12#1", due: "2026-11-25" });
+    assert.equal(moved.updated, true);
+    fake.personMoves("ab12#1", "2026-11-28");
+    const left = await nb.deadlines({ action: "update", key: "ab12#1", due: "2026-11-30" });
+    assert.deepEqual([left.updated, left.touched], [false, true]);
+    const listed = (await nb.deadlines({ action: "list" })).deadlines;
+    assert.deepEqual(listed.map((d) => [d.key, d.due, d.touched]), [["ab12#1", "2026-11-28", true]]);
+    await assert.rejects(nb.deadlines({ action: "create", ...one, key: "ab12#2", due: "2026-02-30" }), (e) => e instanceof NotebookError && e.status === 400);
+  } finally { await fake.close(); }
+});
+
+test("a Godspeed without add-on deadlines: the client says the function is missing", async () => {
+  const fake = await startFakeNotebook();
+  try {
+    fake.withoutDeadlines = true;
+    const nb = new Notebook({ base: fake.url });
+    await assert.rejects(nb.deadlines({ action: "list" }), (e) => e instanceof NotebookError && e.missing === true);
+  } finally { await fake.close(); }
+});

@@ -94,7 +94,7 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
       for (let i = 0; i < max; i++) {
         const r = await world.run(opts);
         out.push(r);
-        if (!r.copied && !r.sorted && !r.check && !r.filed && !r.waiting && !r.noted && !r.items && !r.notes_waiting) break;
+        if (!r.copied && !r.sorted && !r.check && !r.filed && !r.waiting && !r.noted && !r.items && !r.deadlines && !r.notes_waiting) break;
       }
       return out;
     },
