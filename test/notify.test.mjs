@@ -209,3 +209,50 @@ test("a kept-out paper the Clerk could not place is still reported, and its item
     } finally { await w.close(); }
   }
 });
+
+const unsureDocs = (n, prefix, extra = {}) => Array.from({ length: n }, (_, i) => ({ slug: `${prefix}-${i}`, owner: "alex", content: `Harlow Services. A notice about account ${prefix.toUpperCase()}-${1000 + i}, for Alex Morgan, 12 Elm Row, 40210 Fairford. Please read it carefully.`, ...extra }));
+
+test("many papers to check: one short message, ten named, the rest counted, the link last", async () => {
+  const w = await kitWorld({ only: [], extra: unsureDocs(13, "many"), answers: [], settings: { batch_size: 20 } });
+  try {
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 1);
+    const m = w.messages[0];
+    assert.equal((m.match(/" \(2026-10-22\)/g) || []).length, 10, m);
+    assert.match(m, /and 3 more/);
+    assert.match(m.split("\n").pop(), /^https:\/\/notebook\.example\/collections\/documents$/);
+    assert.ok(m.length < 1200, `${m.length} characters`);
+  } finally { await w.close(); }
+});
+
+test("a web address in a paper's title never becomes the message's link", async () => {
+  const [doc] = unsureDocs(1, "url", { upload: { title: "Order from https://shop.example/orders/77" } });
+  const w = await kitWorld({ only: [], extra: [doc], answers: [] });
+  try {
+    const seen = [];
+    await w.runUntilQuiet({ tell: async (text, opts = {}) => { seen.push({ text, link: opts.link }); return { delivered: true }; } });
+    assert.equal(seen.length, 1);
+    const item = w.nb.rows("collection_items").find((i) => i.source_id === w.record("url-0").sum);
+    assert.equal(seen[0].link, `https://notebook.example/collections/documents/${item.id}`);
+    assert.deepEqual(seen[0].text.match(/https?:\/\/\S+/g), [seen[0].link]);
+    assert.ok(seen[0].text.includes("Order from shop.example/orders/77"), seen[0].text);
+  } finally { await w.close(); }
+});
+
+test("a kept-out document deleted in Paperless is named by its file, never as kept out", async () => {
+  const w = await kitWorld({ only: ["doctor-letter", "council-letter", "utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    const keep = [...w.pl.state.tags.values()].find((t) => t.name === "Not in notebook").id;
+    change(w, "council-letter", { tags: [...w.doc("council-letter").tags, keep] });
+    await w.runUntilQuiet();
+    const before = w.messages.length;
+    w.pl.remove(w.ids["doctor-letter"]);
+    w.pl.remove(w.ids["council-letter"]);
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, before + 1);
+    const m = w.messages[w.messages.length - 1];
+    assert.ok(!m.includes("Document kept out of the notebook"), m);
+    assert.ok(m.includes('"2025-09-03 Blood test results"') && m.includes('"2025-06-02 Changes to the waste collection from July 2025"'), m);
+  } finally { await w.close(); }
+});

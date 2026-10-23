@@ -74,3 +74,25 @@ test("where messages go when nothing is set: this computer's notifications on a 
   assert.deepEqual(talkOf({ talk: null }, { platform: "linux", env: {} }), ["telegram"]);
   assert.deepEqual(talkOf({ talk: ["telegram"] }, { platform: "win32", env: {} }), ["telegram"]);
 });
+
+test("a channel gets the message's own link, not a web address from the text", async () => {
+  const got = [];
+  const r = await tell("The Clerk:\nCould not be placed: \"Order from shop.example https://shop.example/orders/77\".\nhttps://notebook.example/collections/documents", {
+    settings: { talk: ["desktop"] }, env: {}, link: "https://notebook.example/collections/documents",
+    impls: { desktop: { send: async ({ link }) => { got.push(link); return true; } } },
+  });
+  assert.equal(r.delivered, true);
+  assert.deepEqual(got, ["https://notebook.example/collections/documents"]);
+});
+
+test("telegram: a message longer than Telegram allows keeps its last line, the link", async () => {
+  const tg = await fakeTelegram();
+  try {
+    const { ws } = godspeedWithBot();
+    const text = `The Clerk:\n${"x".repeat(5000)}\nhttps://notebook.example/collections/documents`;
+    await tell(text, { settings: { talk: ["telegram"], workspace: ws }, env: { GODSPEED_CLERK_TELEGRAM_API: tg.url, GODSPEED_CLERK_TEST: "1" }, home: tmp() });
+    const sent = tg.calls[0].body.text;
+    assert.ok(sent.length <= 4000, `${sent.length}`);
+    assert.match(sent, /\nhttps:\/\/notebook\.example\/collections\/documents$/);
+  } finally { await tg.close(); }
+});
