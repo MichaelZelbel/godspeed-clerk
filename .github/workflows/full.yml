@@ -13,6 +13,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: The Godspeed product, for its notebook
+        uses: actions/checkout@v4
+        with:
+          repository: MichaelZelbel/godspeed-mission-control
+          path: product
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,6 +32,7 @@ jobs:
         env:
           PAPERLESS_URL: http://127.0.0.1:8000
           KIT_RENDERED: test/kit/rendered
+          GODSPEED_NOTEBOOK_CHECKOUT: product
       - name: What Paperless said, when it failed
         if: failure()
         run: docker compose -f test/full/compose.yaml logs --tail 200 webserver

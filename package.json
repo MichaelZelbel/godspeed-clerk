@@ -1,7 +1,7 @@
 {
   "name": "godspeed-clerk",
-  "version": "0.1.0",
-  "description": "The Clerk, an add-on for Godspeed Mission Control: it sorts the documents in your Paperless-ngx and files each one into the right folder of your own cloud drive.",
+  "version": "0.2.0",
+  "description": "The Clerk, an add-on for Godspeed Mission Control: it sorts the documents in your Paperless-ngx, files each one into the right folder of your own cloud drive, and tells Godspeed what they say.",
   "keywords": [ "godspeed-mission-control", "godspeed", "personal-ai", "paperless-ngx", "paperless", "documents", "google-drive", "add-on" ],
   "homepage": "https://github.com/MichaelZelbel/godspeed-clerk#readme",
   "bugs": { "url": "https://github.com/MichaelZelbel/godspeed-clerk/issues" },

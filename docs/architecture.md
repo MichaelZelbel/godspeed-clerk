@@ -12,8 +12,14 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `oauth.mjs` | Google sign-in with PKCE, that also works on a server without a browser. |
 | `plan.mjs` | The folder plan: proposing it from your folders, the rules, file names. |
 | `pipeline.mjs` | The steps of one document: first copy, sorting, filing. |
+| `notebook.mjs` | The Godspeed notebook's local door (`/api/query`, and `/mcp` for its web address). |
+| `note.mjs` | The text of a note: the Clerk's part, and where the person's own lines begin. |
+| `notes.mjs` | The note step: one note per document, the summary, "Not in notebook". |
+| `documents.mjs` | The "Documents" collection: one item per document. |
+| `notify.mjs` | One message per run for what the person can act on. |
 | `run.mjs` | One run: the steps over all documents, in batches and within a time limit. |
 | `records.mjs` | One record per document, the log, the outbox. |
+| `../channels/` | Where messages go: the assistant's own Telegram bot, this computer's notifications. |
 | `context.mjs` | What a run needs, read fresh from the state folder. |
 | `status.mjs`, `lock.mjs`, `settings.mjs`, `paths.mjs`, `files.mjs`, `names.mjs` | The rest. |
 
@@ -30,6 +36,13 @@ file each, found by the registry). The work lives in `lib/core/`:
    or older than `settle_minutes`) is renamed to `<date> <title>.pdf` and moved into the folder the
    plan gives it. A document that changed in Paperless since it was filed is filed again.
 5. Documents gone from Paperless: their files stay; the person hears it once.
+6. Notes and the collection, for every document that is filed: its note, then its item, at most
+   `note_batch` (50) per run. A note is written again only when what it is made from changed.
+   When the notebook does not answer, this part waits; after `notebook_down_hours` the person
+   hears it once.
+7. One message for what the person can act on: what is new in the outbox, no longer true or
+   already said dropped, one link. While a pile still waits to be sorted, papers to check are held
+   (at most a day) so they come together.
 
 The worker does one run every `interval_minutes` (3), and a run starts no new document after
 `run_minutes` (5), so a new scan has its first copy within about ten minutes.
@@ -97,3 +110,27 @@ Insurance, Services and the like). "Peters" is not "Petersen" and "Finanzamt Wen
   goes, and only a sure answer moves it. An unsure answer keeps it where it is.
 - The file itself carries where the Clerk last put it, and whether it was kept in "To sort" to be
   checked. With the records lost, that is the answer: no question, nothing moved.
+
+## The notes
+
+One note per document, in the notebook folder "Documents". Its id comes from the document's mark
+(`clerk-` and the start of the checksum Paperless keeps of the original) and its header carries
+the mark (`source_app: godspeed-clerk`, `clerk_doc`, `clerk_sum`), so a reinstall, lost records or
+a rebuilt Paperless find the same note, never a second one. A note the person deleted is never
+made again (the notebook refuses its id); one in the trash stays there.
+
+The Clerk's part comes first and ends with its own heading ("Your notes", in the person's
+language, its words kept in the header as `clerk_yours`); everything below that heading is the
+person's and is kept exactly. The notebook's editor writes notes back through its own Markdown,
+which drops HTML comments, so the boundary is that visible heading. The full text sits in a fence
+longer than any run of backticks in it, and every value from Paperless or the AI is one line with
+its markup escaped, so nothing in a letter can look like the heading. A note whose heading the
+person removed, and that is no longer exactly what the Clerk wrote, is left as it is.
+
+The summary and key facts live in the note's header (`clerk_summary`, `clerk_facts`) and body,
+and nowhere else. They come from the AI answer that sorted the document; a document the Clerk did
+not sort gets one AI call for them, in batches, except the archive (sorted before the Clerk came)
+and a paper to check.
+
+Every write carries the version just read (`expected`), so a note or item the person saves at
+that moment is refused by the notebook and kept; the Clerk tries again next run.

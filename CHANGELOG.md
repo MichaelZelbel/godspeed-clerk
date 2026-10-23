@@ -1,5 +1,21 @@
 # Changes
 
+## 0.2.0 (second batch, private trial)
+
+- One note per document in the Godspeed notebook (folder "Documents"): fields, a two-sentence
+  summary and the key facts from the answer that sorted it, links to Paperless and the drive, and
+  the full text. The person's own lines below "Your notes" are kept; the archive is noted without
+  an AI summary; a reinstall finds every note again.
+- "Not in notebook": no note; added later, the Clerk's text comes out of the note (trash when
+  nothing of the person's is in it, otherwise only their lines stay).
+- The "Documents" collection: one item per document, with its status, folder and links; a kept-out
+  document's item has no title.
+- One message per run for what the person can act on, with one link, never twice: through the
+  assistant's own Telegram bot or this computer's notifications. Papers to check found while a
+  pile is sorted come together.
+- Notes in batches with their progress ("180 of 640 noted"); every new step resumable.
+- The words of notes and messages are settings, for the person's language.
+
 ## 0.1.0 (first batch, private trial)
 
 - Connects to an existing Paperless-ngx with the account's own token, reading only during setup.
