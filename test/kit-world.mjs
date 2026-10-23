@@ -8,6 +8,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startFakePaperless } from "./fakes/paperless.mjs";
 import { startFakeDrive, TEST_CLIENT } from "./fakes/drive.mjs";
+import { startFakeNotebook } from "./fakes/notebook.mjs";
+import { Notebook } from "../lib/core/notebook.mjs";
+import { SOURCE } from "../lib/core/note.mjs";
 import { answerFor } from "./fakes/answers.mjs";
 import { statePaths } from "../lib/core/paths.mjs";
 import { saveSettings, loadSettings } from "../lib/core/settings.mjs";
@@ -55,6 +58,7 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
   }
   const pl = await startFakePaperless({ users: [{ id: 2, username: "alex", password: "pw", token: "tok-alex" }, { id: 3, username: "sam", password: "pw2", token: "tok-sam" }], tags, types, correspondents, docs });
   const drive = await startFakeDrive({ tree, account: KIT.drive.account });
+  const nb = await startFakeNotebook();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-kit-"));
   const paths = statePaths(dir);
   writeJson(paths.paperless, { url: pl.url, user: "alex", token: "tok-alex" });
@@ -76,17 +80,21 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
     if (world.aiDown) { const e = new Error("no answer from Godspeed's model connection"); e.name = "ModelUnavailable"; throw e; }
     return { text: answerFor(answerList, used, system, prompt), provider: "test-provider", model: "test-model" };
   };
+  // Every message the Clerk sends, as a channel that took it (`channelDown`: no channel takes it).
+  const messages = [];
+  const tell = async (text) => { if (world.channelDown) return { delivered: false, results: { pretend: "down" } }; messages.push(text); return { delivered: true, results: { pretend: "ok" } }; };
   const world = {
-    pl, drive, paths, ids, prompts, aiDown: false,
+    pl, drive, nb, paths, ids, prompts, messages, aiDown: false, channelDown: false,
+    env: { ...drive.env, GODSPEED_CLERK_NOTEBOOK: nb.url },
     setAnswers: (a) => { answerList = a; },
-    context: (opts = {}) => buildContext(paths, { env: drive.env, ask, today: TODAY, ...opts }),
+    context: (opts = {}) => buildContext(paths, { env: world.env, ask, today: TODAY, notebook: new Notebook({ base: nb.url, timeoutMs: 3000 }), tell, ...opts }),
     run: (opts = {}) => runOnce(world.context(opts)),
     async runUntilQuiet(opts = {}, max = 12) {
       const out = [];
       for (let i = 0; i < max; i++) {
         const r = await world.run(opts);
         out.push(r);
-        if (!r.copied && !r.sorted && !r.check && !r.filed && !r.waiting) break;
+        if (!r.copied && !r.sorted && !r.check && !r.filed && !r.waiting && !r.noted && !r.items && !r.notes_waiting) break;
       }
       return out;
     },
@@ -97,7 +105,11 @@ export async function kitWorld({ sorting = "godspeed", only = null, settings = {
     tagNames: (doc) => doc.tags.map((t) => pl.state.tags.get(t).name).sort(),
     senderName: (doc) => (doc.correspondent ? pl.state.correspondents.get(doc.correspondent).name : null),
     typeName: (doc) => (doc.document_type ? pl.state.types.get(doc.document_type).name : null),
-    close: async () => { await pl.close(); await drive.close(); },
+    // The Clerk's notes in the notebook (trashed ones too), and those of one kit document.
+    notes: () => nb.rows("notes").filter((n) => n.source_app === SOURCE),
+    notesOf: (slug) => world.notes().filter((n) => n.clerk_doc === ids[slug]),
+    noteOf: (slug) => { const n = world.notesOf(slug); if (n.length !== 1) throw new Error(`${slug} has ${n.length} notes`); return n[0]; },
+    close: async () => { await pl.close(); await drive.close(); await nb.close(); },
   };
   return world;
 }
