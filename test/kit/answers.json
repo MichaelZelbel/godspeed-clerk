@@ -1,4 +1,5 @@
 [
+  {"match": ["Who sent this document", "Pinecrest Dental"], "answer": {"correspondent": "Pinecrest Dental Practice", "sure": true}},
   {"match": ["Place these types"], "answer": {"rules": [{"type": "Certificate", "folder": "Taxes/{year}"}, {"type": "Receipt", "folder": "Receipts"}], "everything_else": null, "confident": true}},
   {"match": ["Pick the folder"], "answer": {"folder": null, "confident": false}},
   {"match": ["Brightwater Utilities", "55120"], "answer": {"title": "Electricity invoice February 2025", "correspondent": "Brightwater Utilities", "document_type": "Invoice", "tags": ["Home"], "created": "2025-03-04", "folder": "Invoices/{sender}", "confident": true, "sender_folder": "Invoices/Brightwater Utilities", "summary": "Brightwater Utilities bills 94.04 EUR for the electricity used at 12 Elm Row in February 2025. The amount is collected by direct debit on 25 March 2025.", "key_facts": ["Total: 94.04 EUR", "Invoice number: 55120", "Customer number: 7781-2201", "Direct debit on 25 March 2025"]}},

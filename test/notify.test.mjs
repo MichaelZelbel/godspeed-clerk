@@ -7,17 +7,21 @@ import { readJson, writeJson } from "../lib/core/files.mjs";
 
 const links = (text) => text.match(/https?:\/\/\S+/g) || [];
 const change = (w, slug, fields) => Object.assign(w.doc(slug), fields, { modified: new Date().toISOString() });
+// F16 and F19: papers to sort are counted in one line, with one link that opens Paperless's "To sort"
+// page, which lists exactly them.
+const yes = { storage_paths: "yes" };
+const viewOf = (w) => [...w.pl.state.savedViews.values()][0];
+const viewLink = (w) => `${w.pl.url}/view/${viewOf(w).id}`;
 
-test("F16: a run over the kit sends exactly one message, naming the blurry document; a second run with nothing new sends none", async () => {
-  const w = await kitWorld();
+test("F16: a run over the kit sends exactly one message, counting the blurry document, with a link that opens the To sort page listing exactly the papers waiting; a second run with nothing new sends none", async () => {
+  const w = await kitWorld({ settings: yes });
   try {
     await w.runUntilQuiet();
     assert.equal(w.messages.length, 1);
     const [m] = w.messages;
-    assert.ok(m.includes(`"${w.doc("blurry-scan").title}"`), m);
-    assert.ok(m.includes(`"${w.doc("unusable-answer").title}"`), "the answer unusable twice is a paper to check too");
-    assert.match(m, /waiting in "To sort"/);
-    assert.deepEqual(links(m), ["https://notebook.example/collections/documents"]);
+    assert.match(m, /2 papers are waiting to be sorted\./, "the blurry document and the answer unusable twice");
+    assert.deepEqual(links(m), [viewLink(w)]);
+    assert.deepEqual(w.pl.viewDocs(viewOf(w).id), [w.ids["blurry-scan"], w.ids["unusable-answer"]].sort((a, b) => a - b), "the page lists exactly the papers waiting");
     for (const slug of ["utility-invoice", "council-letter", "doctor-letter"]) assert.ok(!m.includes(w.doc(slug).title), `${slug} is not named`);
     await w.run();
     await w.run();
@@ -25,13 +29,34 @@ test("F16: a run over the kit sends exactly one message, naming the blurry docum
   } finally { await w.close(); }
 });
 
-test("one paper to check: the link opens its item", async () => {
+test("one paper to sort: one line with the link to the To sort page", async () => {
+  const w = await kitWorld({ only: ["blurry-scan", "utility-invoice"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    assert.deepEqual(w.messages, [`The Clerk: 1 paper is waiting to be sorted. ${viewLink(w)}`]);
+  } finally { await w.close(); }
+});
+
+test("without the To sort page (no yes), the link opens Paperless's list of exactly the papers with Check this", async () => {
   const w = await kitWorld({ only: ["blurry-scan", "utility-invoice"] });
   try {
     await w.runUntilQuiet();
+    const check = [...w.pl.state.tags.values()].find((t) => t.name === "Check this").id;
+    assert.deepEqual(w.messages, [`The Clerk: 1 paper is waiting to be sorted. ${w.pl.url}/documents?tags__id__all=${check}`]);
+  } finally { await w.close(); }
+});
+
+test("a paper newly waiting after earlier ones were told is told too, counting all that wait", async () => {
+  const w = await kitWorld({ only: ["blurry-scan"], settings: yes });
+  try {
+    await w.runUntilQuiet();
     assert.equal(w.messages.length, 1);
-    const item = w.nb.rows("collection_items").find((i) => i.source_id === w.record("blurry-scan").sum);
-    assert.deepEqual(links(w.messages[0]), [`https://notebook.example/collections/documents/${item.id}`]);
+    w.pl.addDoc({ id: 70, content: "Larchmont Services. A notice about account LATE-3001 for Alex Morgan, 12 Elm Row, 40210 Fairford. Please read it carefully.", title: "Scan 2026-10-22 19-40-00", original_file_name: "Scan 2026-10-22 19-40-00.pdf", tags: [1], owner: 2, created: "2026-10-22", added: "2026-10-22T19:40:00+02:00" });
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 2);
+    assert.match(w.messages[1], /2 papers are waiting to be sorted\./);
+    await w.runUntilQuiet();
+    assert.equal(w.messages.length, 2, "once");
   } finally { await w.close(); }
 });
 
@@ -93,7 +118,7 @@ test("a message no channel took is sent next run, once", async () => {
     await w.run();
     await w.run();
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`"${w.doc("blurry-scan").title}"`));
+    assert.match(w.messages[0], /1 paper is waiting to be sorted\./);
   } finally { await w.close(); }
 });
 
@@ -110,8 +135,8 @@ test("what is no longer true by the time a channel takes it is not said", async 
     w.channelDown = false;
     await w.runUntilQuiet();
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`"${w.doc("unusable-answer").title}"`), "the paper still to check is named");
-    assert.ok(!w.messages[0].includes(`"${scanTitle}"`) && !w.messages[0].includes("Dental check-up reminder"), "the resolved one is not");
+    assert.match(w.messages[0], /1 paper is waiting to be sorted\./, "the paper still to check is counted, the resolved one is not");
+    assert.ok(!w.messages[0].includes(scanTitle) && !w.messages[0].includes("Dental check-up reminder"));
   } finally { await w.close(); }
 });
 
@@ -125,7 +150,7 @@ test("everything of one run in one message, with one link", async () => {
     assert.equal(w.messages.length, 1);
     const m = w.messages[0];
     assert.match(m, /^The Clerk:\n/);
-    assert.match(m, /Could not be placed/);
+    assert.match(m, /1 paper is waiting to be sorted\./);
     assert.match(m, /Google Drive no longer lets the Clerk file/);
     assert.match(m, /Deleted in Paperless/);
     assert.equal(links(m).length, 1);
@@ -133,12 +158,12 @@ test("everything of one run in one message, with one link", async () => {
 });
 
 test("the person's language: every sentence of a message comes from the settings", async () => {
-  const w = await kitWorld({ only: ["blurry-scan"], settings: { texts: { message_head: "Der Clerk:", message_check: "Nicht einsortiert, liegt in \"{to_sort}\": {list}." } } });
+  const w = await kitWorld({ only: ["blurry-scan"], settings: { ...yes, texts: { message_head: "Der Clerk:", message_to_sort_one: "1 Papier wartet aufs Einsortieren." } } });
   try {
     await w.runUntilQuiet();
-    assert.match(w.messages[0], /^Der Clerk:\nNicht einsortiert, liegt in "To sort": "/);
+    assert.equal(w.messages[0], `Der Clerk: 1 Papier wartet aufs Einsortieren. ${viewLink(w)}`);
     const st = readJson(w.paths.state);
-    assert.ok(Object.keys(st.notify.sent).some((k) => k === `check:${w.ids["blurry-scan"]}`));
+    assert.ok(Object.keys(st.notify.sent).some((k) => k.startsWith(`sort:${w.ids["blurry-scan"]}:`)));
     assert.ok(!JSON.stringify(st.notify).includes(w.doc("blurry-scan").title), "the state keeps numbers, not titles");
     writeJson(w.paths.state, st);
   } finally { await w.close(); }
@@ -156,10 +181,10 @@ test("a pile being sorted: papers to check come in one message when it is done, 
     await w.run();
     assert.equal(w.messages.length, 1);
     assert.match(w.messages[0], /Google Drive/);
-    assert.doesNotMatch(w.messages[0], /Could not be placed/);
+    assert.doesNotMatch(w.messages[0], /waiting to be sorted/);
     await w.runUntilQuiet();
     assert.equal(w.messages.length, 2);
-    assert.ok(w.messages[1].includes(`"${w.doc("blurry-scan").title}"`) && w.messages[1].includes(`"${w.doc("unusable-answer").title}"`), w.messages[1]);
+    assert.match(w.messages[1], /2 papers are waiting to be sorted\./, w.messages[1]);
   } finally { await w.close(); }
 });
 
@@ -172,7 +197,7 @@ test("papers to check are held for a pile at most a day", async () => {
     assert.equal(w.messages.length, 0);
     await w.run({ clock: () => Date.now() + 25 * 3600e3 });
     assert.equal(w.messages.length, 1);
-    assert.ok(w.messages[0].includes(`"${w.doc("blurry-scan").title}"`));
+    assert.match(w.messages[0], /1 paper is waiting to be sorted\./);
   } finally { await w.close(); }
 });
 
@@ -200,7 +225,7 @@ test("a kept-out paper the Clerk could not place is still reported, and its item
       await w.runUntilQuiet();
       assert.match(w.pathOf(doc.slug), /^Paperwork\/To sort\//, sorting);
       assert.equal(w.messages.length, 1, `${sorting}: one message`);
-      assert.ok(w.messages[0].includes(`"${w.doc(doc.slug).title}"`), w.messages[0]);
+      assert.match(w.messages[0], /1 paper is waiting to be sorted\./, w.messages[0]);
       const it = w.nb.rows("collection_items").find((i) => i.source_id === w.record(doc.slug).sum);
       assert.equal(it.data.status, "check this", sorting);
       assert.equal(it.data.title, undefined);
@@ -212,16 +237,12 @@ test("a kept-out paper the Clerk could not place is still reported, and its item
 
 const unsureDocs = (n, prefix, extra = {}) => Array.from({ length: n }, (_, i) => ({ slug: `${prefix}-${i}`, owner: "alex", content: `Harlow Services. A notice about account ${prefix.toUpperCase()}-${1000 + i}, for Alex Morgan, 12 Elm Row, 40210 Fairford. Please read it carefully.`, ...extra }));
 
-test("many papers to check: one short message, ten named, the rest counted, the link last", async () => {
-  const w = await kitWorld({ only: [], extra: unsureDocs(13, "many"), answers: [], settings: { batch_size: 20 } });
+test("many papers to sort: one short line, all counted, one link to the page that lists them", async () => {
+  const w = await kitWorld({ only: [], extra: unsureDocs(13, "many"), answers: [], settings: { ...yes, batch_size: 20 } });
   try {
     await w.runUntilQuiet();
-    assert.equal(w.messages.length, 1);
-    const m = w.messages[0];
-    assert.equal((m.match(/" \(2026-10-22\)/g) || []).length, 10, m);
-    assert.match(m, /and 3 more/);
-    assert.match(m.split("\n").pop(), /^https:\/\/notebook\.example\/collections\/documents$/);
-    assert.ok(m.length < 1200, `${m.length} characters`);
+    assert.deepEqual(w.messages, [`The Clerk: 13 papers are waiting to be sorted. ${viewLink(w)}`]);
+    assert.equal(w.pl.viewDocs(viewOf(w).id).length, 13);
   } finally { await w.close(); }
 });
 
@@ -232,10 +253,10 @@ test("a web address in a paper's title never becomes the message's link", async 
     const seen = [];
     await w.runUntilQuiet({ tell: async (text, opts = {}) => { seen.push({ text, link: opts.link }); return { delivered: true }; } });
     assert.equal(seen.length, 1);
-    const item = w.nb.rows("collection_items").find((i) => i.source_id === w.record("url-0").sum);
-    assert.equal(seen[0].link, `https://notebook.example/collections/documents/${item.id}`);
+    const check = [...w.pl.state.tags.values()].find((t) => t.name === "Check this").id;
+    assert.equal(seen[0].link, `${w.pl.url}/documents?tags__id__all=${check}`);
     assert.deepEqual(seen[0].text.match(/https?:\/\/\S+/g), [seen[0].link]);
-    assert.ok(seen[0].text.includes("Order from shop.example/orders/77"), seen[0].text);
+    assert.ok(!seen[0].text.includes("shop.example"), seen[0].text);
   } finally { await w.close(); }
 });
 

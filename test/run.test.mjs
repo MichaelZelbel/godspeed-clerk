@@ -135,7 +135,8 @@ test("F8: with Google access withdrawn a run files nothing and leaves one notice
 });
 
 test("F14: no log line, record or temporary file holds a sentence of a kit document", async () => {
-  const w = await kitWorld();
+  // With the storage paths (F19), so their records are checked too.
+  const w = await kitWorld({ settings: { storage_paths: "yes" } });
   try {
     await w.runUntilQuiet();
     const sentences = [];
@@ -144,7 +145,8 @@ test("F14: no log line, record or temporary file holds a sentence of a kit docum
     const files = [];
     const walk = (dir) => { for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) { const p = path.join(dir, n); fs.statSync(p).isDirectory() ? walk(p) : files.push(p); } };
     walk(w.paths.records);
-    files.push(w.paths.log, w.paths.state, w.paths.outbox, w.paths.links);
+    files.push(w.paths.log, w.paths.state, w.paths.outbox, w.paths.links, w.paths.mirror);
+    assert.ok(fs.existsSync(w.paths.mirror), "the storage paths' records are there to be checked");
     for (const f of files.filter(fs.existsSync)) {
       const body = fs.readFileSync(f, "utf8");
       for (const s of sentences) assert.ok(!body.includes(s), `${path.basename(f)} holds "${s}"`);
@@ -154,7 +156,7 @@ test("F14: no log line, record or temporary file holds a sentence of a kit docum
     assert.match(fs.readFileSync(w.paths.log, "utf8"), /doc \d+: /);
     assert.ok(w.notes().length > 0 && w.messages.length === 1, "notes were written and a message sent, and none of it stays here");
     // No temporary file anywhere: the state folder holds the Clerk's own files and nothing else.
-    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records"];
+    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records", "mirror.json"];
     for (const n of fs.readdirSync(w.paths.root)) assert.ok(known.includes(n), `unexpected ${n} in the state folder`);
     if (process.platform !== "win32") for (const f of files.filter(fs.existsSync)) assert.equal(fs.statSync(f).mode & 0o777, 0o600, f);
   } finally { await w.close(); }
