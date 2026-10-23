@@ -237,7 +237,7 @@ async function connectDrive(state, fake) {
   const landed = (await fetch(link, { redirect: "manual" })).headers.get("location");
   await must(state, ["drive", "finish", landed], env);
 }
-async function setUp(mode, fake) {
+async function setUp(mode, fake, storagePaths = null) {
   const state = tmp(mode);
   const env = fake.env;
   await must(state, ["setup", "--paperless", PL, "--user", "alex", "--godspeed", WS, "--no-service", "--no-copy", "--sorting", mode, "--country", KIT.country], env);
@@ -249,9 +249,9 @@ async function setUp(mode, fake) {
   await connectDrive(state, fake);
   await must(state, ["drive", "folder", "Paperwork"], env);
   const p = await must(state, ["plan", "propose"], env);
-  await must(state, ["plan", "confirm"], env);
+  const confirmed = await must(state, ["plan", "confirm", ...(storagePaths ? ["--storage-paths", storagePaths] : [])], env);
   await must(state, ["resume"], env);
-  return { state, env, proposal: p.out };
+  return { state, env, proposal: p.out, confirmed: confirmed.out };
 }
 const sumIn = (state, slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8")).sum;
 const oneFile = (fake, slug) => fake.marked(ids[slug]).filter((f) => !f.trashed);
@@ -282,13 +282,20 @@ async function main() {
     TG = await startTelegram();
     try {
       const before = await snapshot();
-      const { state, env } = await setUp(mode, fake);
+      const views0 = await all(alexTok, "saved_views/"), paths0 = await all(alexTok, "storage_paths/");
+      const { state, env } = await setUp(mode, fake, mode === "nobody" ? "no" : "yes");
       // The Clerk was running when the kit arrived: new letters, not an archive it found (which
       // gets no AI reading, F10), so their deadlines are read.
       const sf = path.join(state, "state.json"), st = fs.existsSync(sf) ? JSON.parse(fs.readFileSync(sf, "utf8")) : {};
       fs.writeFileSync(path.join(state, "state.json"), JSON.stringify({ ...st, started_at: "2026-10-01T00:00:00Z" }));
       await runUntilQuiet(state, env);
       check(await snapshot() === before, "every document, tag, sender, type and custom field in Paperless is exactly as before");
+      if (mode === "nobody") {
+        check(JSON.stringify(await all(alexTok, "storage_paths/")) === JSON.stringify(paths0) && JSON.stringify(await all(alexTok, "saved_views/")) === JSON.stringify(views0), "F19: with the person's \"no\", Paperless's storage paths and saved views are unchanged");
+      } else {
+        const sp = await all(alexTok, "storage_paths/"), views = await all(alexTok, "saved_views/");
+        check(sp.some((x) => x.name === "To sort") && sp.some((x) => x.name === "Letters") && views.some((v) => v.name === "To sort"), `F4, F19: with the yes, the storage paths and the To sort page are made, and nothing of a document changes (${sp.map((x) => x.name).join(", ")})`);
+      }
       const here = ALEX.filter((s) => !HELD_BACK.includes(s));
       check(here.every((s) => oneFile(fake, s).length === 1), `every document is filed, once (${here.length})`);
       check(fake.pathOf(oneFile(fake, "bank-certificate")[0]?.id || "") === "Paperwork/Taxes/2024/2025-02-14 Yearly tax certificate 2024.pdf", "the document sorted before goes where the plan says");
@@ -310,7 +317,8 @@ async function main() {
   NB = await startNotebook();
   TG = await startTelegram();
   try {
-    const { state, env } = await setUp("godspeed", fake);
+    const { state, env, confirmed } = await setUp("godspeed", fake, "yes");
+    check(/storage paths? for your folders/.test(confirmed) && /\/view\/\d+/.test(confirmed), `F19: confirming the plan makes the storage paths and the To sort page (${confirmed.trim().split("\n").pop()})`);
     const sumOf = (slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8")).sum;
     const linksIn = (m) => m.match(/https?:\/\/\S+/g) || [];
     const plan = JSON.parse(fs.readFileSync(path.join(state, "plan.json"), "utf8"));
@@ -436,12 +444,49 @@ async function main() {
       check((await NB.collections()).length === 1 && (await NB.collections())[0].name === "Documents", "F17: one collection, \"Documents\"");
       const blurry = await doc("blurry-scan");
       const parking = await doc("parking-notice"), meter = await doc("meter-letter");
-      if (!upgrade) check(TG.sent.length === 1 && [blurry, parking, meter].every((x) => TG.sent[0].includes(`"${x.title}"`)) && linksIn(TG.sent[0]).length === 1,
-        `F16: the run over the kit sent exactly one message, naming the blurry document and the letter whose deadline needs a check, with one link (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
-      else check(TG.sent.length === base + 1 && TG.sent.slice(0, base).some((m) => m.includes(`"${blurry.title}"`)) && [parking, meter].every((x) => TG.sent[base].includes(`"${x.title}"`)) && linksIn(TG.sent[base]).length === 1,
-        `F16: after the update exactly one message names the letter whose deadline needs a check and the one without a date (${TG.sent.length - base}: ${JSON.stringify(TG.sent[base] || "")})`);
+      // F19: the storage paths mirror the plan, and the To sort page lists exactly the papers waiting.
+      const sps = await all(alexTok, "storage_paths/");
+      const spById = new Map(sps.map((x) => [x.id, x]));
+      const toSort = sps.find((x) => x.name === "To sort");
+      const view = (await all(alexTok, "saved_views/")).find((v) => v.name === "To sort");
+      const viewLink = `${PL}/view/${view?.id}`;
+      const waitingSlugs = done.filter((sl) => expected(sl).folder === "To sort");
+      const listed = async () => (await all(alexTok, `documents/?storage_path__id=${toSort?.id}&fields=id`)).map((d) => d.id).sort((a, b) => a - b);
+      check(!!toSort && toSort.matching_algorithm === 0 && toSort.path === "Paperwork/To sort/{{ added }} {{ title }}" && sps.filter((x) => x !== toSort && spById.get(x.id)).every((x) => x.matching_algorithm === 6),
+        "F19: one storage path per plan folder, templates mirroring the drive; Auto matching, except To sort");
+      let mirrored = true;
+      for (const sl of done.filter((x) => expected(x).folder !== "To sort")) {
+        const sp = spById.get((await doc(sl)).storage_path);
+        const want = `Paperwork/${expected(sl).folder.replace(/\/\d{4}$/, "")}/`;
+        if (!sp?.path.startsWith(want)) { mirrored = false; console.log(`        ${sl}: storage path ${sp?.name} ${sp?.path}`); }
+      }
+      check(mirrored, "F5, F19: every paper the Clerk filed carries the storage path of its folder");
+      check(!!view && JSON.stringify(view.filter_rules.map((r) => [r.rule_type, String(r.value)])) === JSON.stringify([[25, String(toSort?.id)]]) && view.display_mode === "smallCards",
+        `F19: a saved view "To sort" (storage path is To sort, small cards) (${JSON.stringify(view)})`);
+      const ui = (await api(alexTok, "GET", "ui_settings/")).settings?.saved_views || {};
+      check((ui.sidebar_views_visible_ids || []).includes(view?.id) && (ui.dashboard_views_visible_ids || []).includes(view?.id), "F19: shown in the sidebar and on the dashboard");
+      check(JSON.stringify(await listed()) === JSON.stringify(waitingSlugs.map((sl) => ids[sl]).sort((a, b) => a - b)), `F19: the To sort page lists exactly the papers left in To sort (${waitingSlugs.join(", ")})`);
+      const n = waitingSlugs.length, line = n === 1 ? "1 paper is waiting to be sorted." : `${n} papers are waiting to be sorted.`;
+      if (!upgrade) check(TG.sent.length === 1 && TG.sent[0].includes(line) && [parking, meter].every((x) => TG.sent[0].includes(`"${x.title}"`)) && JSON.stringify(linksIn(TG.sent[0])) === JSON.stringify([viewLink]),
+        `F16: the run over the kit sent exactly one message, counting the papers to sort and naming the letters whose deadlines need a check, with a link that opens the To sort page (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
+      else check(TG.sent.length === base + 1 && TG.sent[base].includes(line) && [parking, meter].every((x) => TG.sent[base].includes(`"${x.title}"`)) && JSON.stringify(linksIn(TG.sent[base])) === JSON.stringify([viewLink]),
+        `F16: after the update exactly one message counts the papers to sort and names the letters whose deadlines need a check, with the To sort page's link (${TG.sent.length - base}: ${JSON.stringify(TG.sent[base] || "")})`);
       await must(state, ["run"], env);
       check(TG.sent.length === base + 1, "F16: a second run with nothing new sends none");
+
+      section("F19: the person sorts in Paperless, and the drive follows");
+      const letters = sps.find((x) => x.name === "Letters");
+      await api(alexTok, "PATCH", `documents/${ids["blurry-scan"]}/`, { storage_path: letters.id });
+      await must(state, ["run"], env);
+      await refreshNames();
+      const picked = await doc("blurry-scan");
+      check(/^Paperwork\/Letters\//.test(fake.pathOf(oneFile(fake, "blurry-scan")[0]?.id || "")) && oneFile(fake, "blurry-scan").length === 1, `picking Letters as its storage path moves its drive file there at the next run (${fake.pathOf(oneFile(fake, "blurry-scan")[0]?.id || "")})`);
+      check(!picked.tags.includes(tagIds["Check this"]) && picked.storage_path === letters.id, "Check this is off, and the person's pick stays");
+      check(!(await listed()).includes(ids["blurry-scan"]), "it is off the To sort page");
+      const bytes = await api(alexTok, "GET", `documents/${ids["blurry-scan"]}/download/`, undefined, { raw: true });
+      check(bytes.length > 1000, "Paperless still serves the paper after keeping it under its new storage path");
+      await must(state, ["run"], env);
+      check(TG.sent.length === base + 1, "sorting a paper sends no message");
 
       section("F15: deadlines from letters, in Godspeed");
       const dl = await NB.deadlines();
@@ -527,9 +572,19 @@ async function main() {
     check(!/LOST/.test((await must(state, ["status"], env)).out), "status no longer shows a loss");
     if (NB) {
       const last = TG.sent[TG.sent.length - 1] || "";
-      check(TG.sent.length === base + 3 && /Google Drive no longer lets the Clerk file your papers/.test(last) && last.includes(`"${ua.title}"`) && linksIn(last).length === 1,
-        `F16: lost access and the paper to check from that run came as one message with one link (${TG.sent.length}: ${JSON.stringify(last)})`);
+      const view = (await all(alexTok, "saved_views/")).find((v) => v.name === "To sort");
+      check(TG.sent.length === base + 3 && /Google Drive no longer lets the Clerk file your papers/.test(last) && last.includes("1 paper is waiting to be sorted.") && JSON.stringify(linksIn(last)) === JSON.stringify([`${PL}/view/${view?.id}`]),
+        `F16: lost access and the paper to sort from that run came as one message with one link, the To sort page (${TG.sent.length}: ${JSON.stringify(last)})`);
       check((await NB.notes()).filter((x) => x.clerk_doc === ids["unusable-answer"]).length === 1, "F10: after reconnecting, the waiting document has its note");
+
+      section("F19: a storage path the person makes becomes a folder inside the documents folder");
+      const mine = await api(alexTok, "POST", "storage_paths/", { name: "Library", path: "library/{{ title }}", matching_algorithm: 0 });
+      await api(alexTok, "PATCH", `documents/${ids["unusable-answer"]}/`, { storage_path: mine.id });
+      await must(state, ["run"], env);
+      check(!!fake.byPath("Paperwork/Library") && /^Paperwork\/Library\//.test(fake.pathOf(oneFile(fake, "unusable-answer")[0]?.id || "")), `the folder is made inside the documents folder and the paper filed there (${fake.pathOf(oneFile(fake, "unusable-answer")[0]?.id || "")})`);
+      const after = await api(alexTok, "GET", `storage_paths/${mine.id}/`);
+      check(after.name === "Library" && after.path === "library/{{ title }}", "the person's own storage path is not changed");
+      check(TG.sent.length === base + 3, "no message about it");
     }
 
     if (NB) {
@@ -585,10 +640,10 @@ async function main() {
     const files = [];
     const walk = (dir) => { for (const n of fs.existsSync(dir) ? fs.readdirSync(dir) : []) { const f = path.join(dir, n); fs.statSync(f).isDirectory() ? walk(f) : files.push(f); } };
     walk(path.join(state, "records"));
-    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records"];
+    const known = ["settings.json", "paperless.json", "drive.json", "plan.json", "state.json", "clerk.log", "outbox.jsonl", "links.json", "drive-tree.json", "drive-tree-position.json", "records", "mirror.json"];
     const strays = fs.readdirSync(state).filter((n) => !known.includes(n));
     check(strays.length === 0, `no temporary file: the state folder holds only the Clerk's own files${strays.length ? ` (${strays.join(", ")})` : ""}`);
-    files.push(...["clerk.log", "state.json", "outbox.jsonl", "links.json"].map((n) => path.join(state, n)).filter(fs.existsSync));
+    files.push(...["clerk.log", "state.json", "outbox.jsonl", "links.json", "mirror.json"].map((n) => path.join(state, n)).filter(fs.existsSync));
     const noteBits = NB ? (await NB.notes()).flatMap((n) => [n.clerk_summary, ...(n.clerk_facts || []), ...((n.clerk_asks?.items || []).map((a) => a.ask))]).filter(Boolean).concat((await NB.deadlines()).map((d) => d.title.replace(/ \(check the date\)$/, ""))) : [];
     const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)) || noteBits.some((x) => b.includes(x)); });
     check(leaks.length === 0, `no log line, record or temporary file holds a sentence, a title or a note's summary${leaks.length ? `: ${leaks.join(", ")}` : ""}`);

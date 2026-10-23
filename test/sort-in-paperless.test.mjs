@@ -225,3 +225,37 @@ test("a paper the AI is unsure of is on the To sort page at once, also while Goo
     assert.equal(patches.length, 1, "in the same update that sorted it");
   } finally { await w.close(); }
 });
+
+test("a paper sorted while Google Drive is away is told once: not again when its file reaches To sort", async () => {
+  const w = await kitWorld({ only: ["utility-invoice"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    w.drive.revoke();
+    addPaper(w, "blurry-away", 54, "Pinecrest Dental Practice. Your next dental check-up is due in October 2025. Please call us to book a time that suits you. Kind regards.", "55");
+    await w.run();
+    await w.run();
+    const told = w.messages.length;
+    assert.match(w.messages.at(-1), /1 paper is waiting to be sorted\./);
+    writeJson(w.paths.drive, { ...readJson(w.paths.drive), refresh_token: w.drive.issue() });
+    await w.runUntilQuiet();
+    assert.match(w.pathOf("blurry-away"), /^Paperwork\/To sort\//);
+    assert.equal(w.messages.length, told, "not told twice about the same wait");
+  } finally { await w.close(); }
+});
+
+test("F18: with the records lost, storage paths that stand for where the files are change nothing", async () => {
+  const fs = await import("node:fs");
+  const w = await kitWorld({ only: ["utility-invoice", "council-letter", "blurry-scan"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    set(w, "blurry-scan", { storage_path: spNamed(w, "Letters").id });
+    await w.runUntilQuiet();
+    const pl = w.pl.writes.length, drive = w.drive.writes.length, prompts = w.prompts.length, plan = JSON.stringify(readJson(w.paths.plan));
+    fs.rmSync(w.paths.records, { recursive: true, force: true });
+    await w.runUntilQuiet();
+    assert.equal(w.drive.writes.length, drive, "no move, no rename");
+    assert.equal(w.pl.writes.length, pl, "nothing written in Paperless");
+    assert.equal(w.prompts.length, prompts, "no AI asked who sent anything");
+    assert.equal(JSON.stringify(readJson(w.paths.plan)), plan);
+  } finally { await w.close(); }
+});
