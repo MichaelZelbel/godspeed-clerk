@@ -470,9 +470,9 @@ async function main() {
       check((ui.sidebar_views_visible_ids || []).includes(view?.id) && (ui.dashboard_views_visible_ids || []).includes(view?.id), "F19: shown in the sidebar and on the dashboard");
       check(JSON.stringify(await listed()) === JSON.stringify(waitingSlugs.map((sl) => ids[sl]).sort((a, b) => a - b)), `F19: the To sort page lists exactly the papers left in To sort (${waitingSlugs.join(", ")})`);
       const n = waitingSlugs.length, line = n === 1 ? "1 paper is waiting to be sorted." : `${n} papers are waiting to be sorted.`;
-      if (!upgrade) check(TG.sent.length === 1 && TG.sent[0].includes(line) && TG.sent[0].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[0].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[0]) && JSON.stringify(linksIn(TG.sent[0])) === JSON.stringify([viewLink]),
+      if (!upgrade) check(TG.sent.length === 1 && TG.sent[0].includes(line) && TG.sent[0].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[0].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[0]) && JSON.stringify(linksIn(TG.sent[0])) === JSON.stringify([`${PL}/documents/${ids["parking-notice"]}/details`, viewLink]),
         `F16: the run over the kit sent exactly one message, counting the papers to sort and naming the letter whose deadline needs a check in one sentence with its date (the letter with no workable day not at all), with a link that opens the To sort page (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
-      else check(TG.sent.length === base + 1 && TG.sent[base].includes(line) && TG.sent[base].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[base].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[base]) && JSON.stringify(linksIn(TG.sent[base])) === JSON.stringify([viewLink]),
+      else check(TG.sent.length === base + 1 && TG.sent[base].includes(line) && TG.sent[base].includes(`by 9 November 2026: counted from the date of "${parking.title}"`) && !TG.sent[base].includes(meter.title) && !/tell your assistant|collections/i.test(TG.sent[base]) && JSON.stringify(linksIn(TG.sent[base])) === JSON.stringify([`${PL}/documents/${ids["parking-notice"]}/details`, viewLink]),
         `F16: after the update exactly one message counts the papers to sort and names the letters whose deadlines need a check, with the To sort page's link (${TG.sent.length - base}: ${JSON.stringify(TG.sent[base] || "")})`);
       await must(state, ["run"], env);
       check(TG.sent.length === base + 1, "F16: a second run with nothing new sends none");
@@ -659,7 +659,8 @@ async function main() {
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");
     // F16: one link, and one more for each check-the-date sentence when there is more to say; never
     // a link to the notebook's collection.
-    if (NB) check(TG.sent.every((m) => { const l = linksIn(m), dates = m.split("\n").filter((x) => / by \d{1,2} \w+ \d{4}: counted from/.test(x)).length; return l.length === (m.includes("\n") ? dates + 1 : 1) && !l.some((x) => /collections/.test(x)); }), "F16: every message carries its one link (and each check-the-date sentence its paper's), none to the collection");
+    // (Only this version's messages: an earlier one's, in the upgrade, linked to the collection.)
+    if (NB) check(TG.sent.slice(base).every((m) => { const l = linksIn(m), dates = m.split("\n").filter((x) => / by \d{1,2} \w+ \d{4}: counted from/.test(x)).length; return l.length === (m.includes("\n") ? dates + 1 : 1) && !l.some((x) => /collections/.test(x)); }), "F16: every message carries its one link (and each check-the-date sentence its paper's), none to the collection");
 
     section("F4, F19: switched to \"nobody sorts\" and back");
     {
