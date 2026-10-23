@@ -252,16 +252,20 @@ test("many papers to sort: one short line, all counted, one link to the page tha
 });
 
 test("a web address in a paper's title never becomes the message's link", async () => {
+  // A paper named in a message (here: deleted in Paperless) keeps its title without the scheme, and
+  // the message's one link is never the address in its title.
   const [doc] = unsureDocs(1, "url", { upload: { title: "Order from https://shop.example/orders/77" } });
-  const w = await kitWorld({ only: [], extra: [doc], answers: [] });
+  const w = await kitWorld({ only: ["utility-invoice"], extra: [{ ...doc, presorted: { title: "Order from https://shop.example/orders/77", correspondent: "Brightwater Utilities", document_type: "Invoice", tags: [], created: "2025-04-02" } }], answers: [] });
   try {
+    await w.runUntilQuiet();
     const seen = [];
+    w.pl.remove(w.ids["url-0"]);
     await w.runUntilQuiet({ tell: async (text, opts = {}) => { seen.push({ text, link: opts.link }); return { delivered: true }; } });
     assert.equal(seen.length, 1);
-    const check = [...w.pl.state.tags.values()].find((t) => t.name === "Check this").id;
-    assert.equal(seen[0].link, `${w.pl.url}/documents?tags__id__all=${check}`);
+    assert.match(seen[0].text, /Deleted in Paperless/);
+    assert.ok(seen[0].text.includes("Order from shop.example/orders/77"), seen[0].text);
     assert.deepEqual(seen[0].text.match(/https?:\/\/\S+/g), [seen[0].link]);
-    assert.ok(!seen[0].text.includes("shop.example"), seen[0].text);
+    assert.ok(!seen[0].link.includes("shop.example"), seen[0].link);
   } finally { await w.close(); }
 });
 
