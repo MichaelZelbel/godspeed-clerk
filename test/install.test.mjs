@@ -63,3 +63,20 @@ test("F2: the phone's words name the app, the address, the login and the second 
   const forgotten = phoneWords({ address: "https://srv1.example.test:48444", user: "alex" }, { user: "alex" });
   assert.ok(!/undefined|null/.test(forgotten), forgotten);
 });
+
+test("Paperless keeps the person's time zone from their Godspeed notebook, else this server's", async () => {
+  const { personsTimezone } = await import("../lib/install/install.mjs");
+  const http = await import("node:http");
+  let tz = "Europe/Berlin";
+  const srv = http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ data: JSON.parse(b).table === "profiles" ? [{ timezone: tz }] : [] })); }); });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const env = { GODSPEED_CLERK_NOTEBOOK: `http://127.0.0.1:${srv.address().port}` };
+  try {
+    assert.equal(await personsTimezone({ env }), "Europe/Berlin");
+    tz = "Not/AZone";
+    assert.equal(await personsTimezone({ env }), null, "not a time zone");
+    tz = "UTC";
+    assert.equal(await personsTimezone({ env }), null, "the notebook's default says nothing about the person");
+    assert.equal(await personsTimezone({ env: { GODSPEED_CLERK_NOTEBOOK: "http://127.0.0.1:9" } }), null, "no notebook");
+  } finally { srv.close(); }
+});
