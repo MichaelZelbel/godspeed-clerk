@@ -94,7 +94,9 @@ test("F7: the blurry scan and an answer unusable twice: Check this, nothing new,
     const madeTags = w.pl.writes.filter((x) => x.path === "/api/tags/").map((x) => JSON.parse(x.body).name);
     assert.deepEqual(madeTags, ["Check this"]);
     assert.equal(w.pl.writes.filter((x) => x.path === "/api/correspondents/").length, 0);
-    assert.equal(w.prompts.filter((p) => p.prompt.includes("LIB-UNUSABLE-ANSWER")).length, 2);
+    const sorting = (p) => p.system.startsWith("You sort one scanned document");
+    assert.equal(w.prompts.filter((p) => sorting(p) && p.prompt.includes("LIB-UNUSABLE-ANSWER")).length, 2, "the sorting question: exactly twice");
+    assert.equal(w.prompts.filter((p) => !sorting(p) && p.prompt.includes("LIB-UNUSABLE-ANSWER")).length, 1, "and once where it might go, for the person's question (F19)");
     // Not retried every hour: a second round asks nothing more about them.
     const asked = w.prompts.length;
     await w.run();
