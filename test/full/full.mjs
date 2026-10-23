@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import http from "node:http";
 import net from "node:net";
 import { startFakeDrive } from "../fakes/drive.mjs";
+import { keyOf } from "../../lib/core/deadlines.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const KITDIR = path.join(ROOT, "test", "kit");
@@ -39,6 +40,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), `clerk-full-${p}-`));
 
 const CHECKOUT = process.env.GODSPEED_NOTEBOOK_CHECKOUT ? path.resolve(process.env.GODSPEED_NOTEBOOK_CHECKOUT) : null;
+// CLERK_PREVIOUS: a checkout of an earlier Clerk (0.2). Then "Godspeed sorts" starts with that one
+// over the kit, and this version takes over: the upgrade (papers sorted and noted before get their
+// deadlines read once, never sorted or filed again).
+const PREVIOUS = process.env.CLERK_PREVIOUS ? path.resolve(process.env.CLERK_PREVIOUS) : null;
+// The day the Clerk counts from (test mode only), so the kit's letters keep their future deadlines.
+const CLERK_DAY = "2026-10-22";
+const DEADLINE_LETTERS = ["water-invoice", "tax-office-letter", "parking-notice", "gym-letter", "library-reminder", "meter-letter", "clinic-letter"];
+const wantDeadlines = (slugs) => slugs.reduce((n, s) => n + (expected(s).deadlines || []).length, 0);
 const NOBODY = "http://127.0.0.1:9"; // nothing answers here
 
 let failures = 0, passes = 0;
@@ -144,7 +153,22 @@ async function startNotebook() {
   }
   const query = async (body) => { const r = await fetch(`${url}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.error) throw new Error(`notebook: ${r.status} ${j.error}`); return j.data; };
   return {
-    url, query,
+    url, query, ws,
+    // The Clerk's deadlines as the product keeps them (core/addon-deadlines.mjs).
+    deadlines: async () => {
+      const r = await fetch(`${url}/api/functions/addon-deadlines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ addon: "godspeed-clerk", action: "list" }) });
+      const j = await r.json();
+      if (!r.ok || j.error) throw new Error(`notebook deadlines: ${r.status} ${j.error}`);
+      return j.data.deadlines;
+    },
+    // What the product's deadline reminders and the morning brief say on a day (tools/due.js today).
+    remindersOn: (day) => new Promise((resolve) => {
+      const env2 = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GODSPEED_|HERMES_)/i.test(k)));
+      const c = spawn(process.env.NOTEBOOK_NODE || process.execPath, [path.join(CHECKOUT, "tools", "due.js"), "today", "--godspeed", ws], { env: { ...env2, GODSPEED_TODAY: day } });
+      let out = "";
+      c.stdout.on("data", (d) => (out += d));
+      c.on("close", () => resolve(out));
+    }),
     notes: async () => (await query({ table: "notes", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] })),
     items: async () => {
       const colls = await query({ table: "collections", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] });
@@ -177,13 +201,13 @@ const WS = path.join(WORK, "godspeed");
 fs.mkdirSync(WS);
 fs.writeFileSync(path.join(WS, "AGENTS.md"), "A made-up Godspeed folder for the full test.\n");
 
-function clerk(state, args, env = {}) {
+function clerk(state, args, env = {}, app = ROOT) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(ROOT, "bin", "godspeed-clerk.mjs"), ...args, "--state", state], {
+    const child = spawn(process.execPath, [path.join(app, "bin", "godspeed-clerk.mjs"), ...args, "--state", state], {
       env: { ...process.env, GODSPEED_MODEL_COMMAND: path.join(ROOT, "test", "fakes", "model.mjs"), GODSPEED_CLERK_FAKE_ANSWERS: ANSWERS,
         GODSPEED_CLERK_FAKE_PROMPTS: path.join(WORK, "prompts.jsonl"), PAPERLESS_PASSWORD: PW.alex, GODSPEED_CLERK_UPLOAD_CHUNK: "65536",
         // Never a real notebook or a real bot: the test's own, or nothing.
-        GODSPEED_CLERK_NOTEBOOK: NB?.url || NOBODY, GODSPEED_CLERK_TELEGRAM_API: TG?.url || NOBODY, GODSPEED_CLERK_TEST: "1", ...env },
+        GODSPEED_CLERK_NOTEBOOK: NB?.url || NOBODY, GODSPEED_CLERK_TELEGRAM_API: TG?.url || NOBODY, GODSPEED_CLERK_TEST: "1", GODSPEED_CLERK_TODAY: CLERK_DAY, ...env },
     });
     let out = "", err = "";
     child.stdout.on("data", (d) => (out += d));
@@ -191,17 +215,18 @@ function clerk(state, args, env = {}) {
     child.on("close", (code, signal) => resolve({ code, signal, out, err }));
   });
 }
-async function must(state, args, env) {
-  const r = await clerk(state, args, env);
+async function must(state, args, env, app = ROOT) {
+  const r = await clerk(state, args, env, app);
   if (r.code !== 0) throw new Error(`godspeed-clerk ${args.join(" ")} failed (${r.code} ${r.signal || ""}): ${r.err || r.out}`);
   return r;
 }
-async function runUntilQuiet(state, env, max = 10) {
+async function runUntilQuiet(state, env, max = 10, app = ROOT) {
   let last;
   for (let i = 0; i < max; i++) {
-    last = await must(state, ["run"], env);
+    last = await must(state, ["run"], env, app);
     const m = last.out.match(/(\d+) copied to the drive, (\d+) sorted, (\d+) to check, (\d+) filed, (\d+) noted\. .*?; (\d+) waiting/);
-    if (!m || m.slice(1).every((x) => x === "0")) break;
+    const made = last.out.match(/ (\d+) deadline\(s\) made in Godspeed/);
+    if (!m || (m.slice(1).every((x) => x === "0") && !made)) break;
   }
   return last;
 }
@@ -228,6 +253,7 @@ async function setUp(mode, fake) {
   await must(state, ["resume"], env);
   return { state, env, proposal: p.out };
 }
+const sumIn = (state, slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8")).sum;
 const oneFile = (fake, slug) => fake.marked(ids[slug]).filter((f) => !f.trashed);
 const outbox = (state) => (fs.existsSync(path.join(state, "outbox.jsonl")) ? fs.readFileSync(path.join(state, "outbox.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 
@@ -257,6 +283,10 @@ async function main() {
     try {
       const before = await snapshot();
       const { state, env } = await setUp(mode, fake);
+      // The Clerk was running when the kit arrived: new letters, not an archive it found (which
+      // gets no AI reading, F10), so their deadlines are read.
+      const st = JSON.parse(fs.readFileSync(path.join(state, "state.json"), "utf8"));
+      fs.writeFileSync(path.join(state, "state.json"), JSON.stringify({ ...st, started_at: "2026-10-01T00:00:00Z" }));
       await runUntilQuiet(state, env);
       check(await snapshot() === before, "every document, tag, sender, type and custom field in Paperless is exactly as before");
       const here = ALEX.filter((s) => !HELD_BACK.includes(s));
@@ -268,6 +298,9 @@ async function main() {
         const want = here.filter((s) => !expected(s).not_in_notebook);
         check(notes.length === want.length && want.every((s) => notes.filter((n) => n.clerk_doc === ids[s]).length === 1), `F4, F10: every note is still written, one per document (${notes.length} of ${want.length}), the kept-out letter none`);
         check((await NB.items()).length === here.length, "F17: one collection item per document");
+        const dl = await NB.deadlines();
+        check(dl.length === wantDeadlines(here) && here.every((s) => JSON.stringify(dl.filter((d) => d.key.startsWith(keyOf(sumIn(state, s), ""))).map((d) => d.due).sort()) === JSON.stringify((expected(s).deadlines || []).map((x) => x.due).sort())),
+          `F4, F15: every letter's deadlines are still made in Godspeed (${dl.length} of ${wantDeadlines(here)})`);
       } else console.log("  SKIP  the notes (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
     } finally { await fake.close(); await NB?.stop(); await TG.close(); NB = null; TG = null; }
   }
@@ -294,13 +327,43 @@ async function main() {
     check(f0?.appProperties?.clerkDoc === String(ids["utility-invoice"]) && f0?.appProperties?.clerkSum === meta.original_checksum, "F18: the file carries the mark: Paperless number and the original's checksum");
     check(Number(f0?.size) === meta.archive_size && f0?.sha256Checksum === meta.archive_checksum, "F8: the copy in the drive is the searchable PDF, size and checksum as Paperless has them");
 
+    const promptLog = () => (fs.existsSync(path.join(WORK, "prompts.jsonl")) ? fs.readFileSync(path.join(WORK, "prompts.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+    let upgrade = null;
+    if (PREVIOUS) {
+      section(`The upgrade: the kit sorted, filed and noted by the Clerk ${JSON.parse(fs.readFileSync(path.join(PREVIOUS, "package.json"), "utf8")).version}`);
+      await runUntilQuiet(state, env, 10, PREVIOUS);
+      const before = NB ? await NB.deadlines() : [];
+      check(before.length === 0 && (await NB?.notes() || []).length > 0, "the earlier version noted the papers and made no deadline");
+      upgrade = { sorts: promptLog().filter((p) => p.system.startsWith("You sort")).length, readings: promptLog().filter((p) => p.system.startsWith("You summarise")).length, writes: fake.writes.length, sent: TG.sent.length, files: Object.fromEntries(ALEX.filter((s) => !HELD_BACK.includes(s)).map((s) => [s, fake.pathOf(oneFile(fake, s)[0]?.id || "")])) };
+    }
+
     section("F18: killed after each step in turn, and in the middle of an upload");
     await upload(["roofing-invoice", "pay-slip"]);
     for (const point of ["after-copy", "mid-upload", "after-sort", "after-file", ...(NB ? ["after-note", "after-item"] : [])]) {
       const r = await clerk(state, ["run"], { ...env, GODSPEED_CLERK_CRASH_AT: point });
       check(r.signal === "SIGKILL", `killed at ${point}`);
     }
+    if (NB) {
+      // A deadline is made once its letter is sorted, filed and noted: runs go on until one is.
+      let r;
+      for (let i = 0; i < 8; i++) { r = await clerk(state, ["run"], { ...env, GODSPEED_CLERK_CRASH_AT: "after-deadline" }); if (r.signal === "SIGKILL") break; }
+      check(r.signal === "SIGKILL", "killed at after-deadline");
+    }
     await runUntilQuiet(state, env);
+    // Messages the earlier version sent before the update come first.
+    const base = upgrade ? upgrade.sent : 0;
+
+    if (upgrade) {
+      section("The upgrade: every paper's deadlines read once, nothing sorted or filed again");
+      const sortsAfter = promptLog().filter((p) => p.system.startsWith("You sort")).length - upgrade.sorts;
+      check(sortsAfter === 2, `only the two papers uploaded after the update were sorted (${sortsAfter} sorting requests)`);
+      check(Object.entries(upgrade.files).every(([s, where]) => fake.pathOf(oneFile(fake, s)[0]?.id || "") === where), "every paper filed by the earlier version is where it was, under its name");
+      const dl = await NB.deadlines();
+      check(dl.length === wantDeadlines(ALEX.filter((s) => s !== "unusable-answer")), `each letter's deadlines were made, once (${dl.length})`);
+      const readings = promptLog().filter((p) => p.system.startsWith("You summarise")).length - upgrade.readings;
+      const sortedBefore = ALEX.filter((s) => !HELD_BACK.includes(s) && !DOCS.find((d) => d.slug === s).presorted && !expected(s).check).length;
+      check(readings === sortedBefore, `each paper the earlier version sorted was read once for its deadlines (${readings} of ${sortedBefore})`);
+    }
 
     section("F5, F6, F7, F8, F12: the kit, sorted and filed");
     const done = ALEX.filter((s) => s !== "unusable-answer");
@@ -355,7 +418,7 @@ async function main() {
         if (!n[0].content.includes(`(${PL}/documents/${ids[slug]}/details)`) || !n[0].content.includes(`(https://drive.google.com/file/d/${f.id}/view)`)) links = false;
         if (!e.check && !DOCS.find((x) => x.slug === slug).presorted && !n[0].clerk_summary) sums = false;
         const data = it[0].data;
-        const okItem = data.title === d.title && data.folder === e.folder && data.status === (e.check ? "check this" : "sorted") && data.in_drive === true
+        const okItem = data.title === d.title && data.folder === e.folder && data.status === (e.status || (e.check ? "check this" : "sorted")) && data.in_drive === true && data.deadlines === (e.item_deadlines ?? "")
           && data.paperless === `${PL}/documents/${ids[slug]}/details` && data.drive === `https://drive.google.com/file/d/${f.id}/view` && data.note.endsWith(`/dashboard/notes/${n[0].id}`);
         if (!okItem) { fields = false; console.log(`        ${slug}: item ${JSON.stringify(data)}`); }
       }
@@ -367,9 +430,39 @@ async function main() {
       check(items.length === done.length && fields, `F17: one item per document with every field as its expected-result file says (${items.length} of ${done.length})`);
       check((await NB.collections()).length === 1 && (await NB.collections())[0].name === "Documents", "F17: one collection, \"Documents\"");
       const blurry = await doc("blurry-scan");
-      check(TG.sent.length === 1 && TG.sent[0].includes(`"${blurry.title}"`) && linksIn(TG.sent[0]).length === 1, `F16: the run over the kit sent exactly one message, naming the blurry document, with one link (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
+      const parking = await doc("parking-notice"), meter = await doc("meter-letter");
+      if (!upgrade) check(TG.sent.length === 1 && [blurry, parking, meter].every((x) => TG.sent[0].includes(`"${x.title}"`)) && linksIn(TG.sent[0]).length === 1,
+        `F16: the run over the kit sent exactly one message, naming the blurry document and the letter whose deadline needs a check, with one link (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
+      else check(TG.sent.length === base + 1 && TG.sent.slice(0, base).some((m) => m.includes(`"${blurry.title}"`)) && [parking, meter].every((x) => TG.sent[base].includes(`"${x.title}"`)) && linksIn(TG.sent[base]).length === 1,
+        `F16: after the update exactly one message names the letter whose deadline needs a check and the one without a date (${TG.sent.length - base}: ${JSON.stringify(TG.sent[base] || "")})`);
       await must(state, ["run"], env);
-      check(TG.sent.length === 1, "F16: a second run with nothing new sends none");
+      check(TG.sent.length === base + 1, "F16: a second run with nothing new sends none");
+
+      section("F15: deadlines from letters, in Godspeed");
+      const dl = await NB.deadlines();
+      const ofDoc = (slug) => dl.filter((x) => x.key.startsWith(keyOf(sumOf(slug), "")));
+      const water = ofDoc("water-invoice");
+      check(water.length === 1 && water[0].due === "2026-11-20" && water[0].link === `${PL}/documents/${ids["water-invoice"]}/details` && water[0].title === "Pay the Brightwater Utilities electricity invoice of 212.40 EUR",
+        `the letter with a deadline in the future made exactly one deadline with the right date and a link to the document (${JSON.stringify(water)})`);
+      const file = water[0] ? fs.readFileSync(path.join(NB.ws, "due", `${water[0].slug}.md`), "utf8") : "";
+      check(/^ADDON: godspeed-clerk$/m.test(file) && file.includes(`ADDON-KEY: ${keyOf(sumOf("water-invoice"), 1)}`) && /^STRIP: \S+ 2026-11-20$/m.test(file), "it is an ordinary deadline file in Godspeed's due/, carrying the document's mark and which request it is");
+      check(ofDoc("library-reminder").length === 0, "a letter whose deadline has passed made none");
+      const libNote = (await NB.notes()).find((n) => n.clerk_doc === ids["library-reminder"]);
+      check(!!libNote && libNote.content.split("## Key facts")[1]?.split("##")[0].includes("Pay the Fairford Library fine of 12.50 EUR: by 2026-08-31, already passed"), "and it is written into the note's key facts");
+      const tax = ofDoc("tax-office-letter").map((x) => x.due).sort();
+      check(JSON.stringify(tax) === JSON.stringify(["2026-11-13", "2026-11-30"]), `the letter with two requests made two (${tax.join(", ")})`);
+      const pk = ofDoc("parking-notice");
+      check(pk.length === 1 && pk[0].due === "2026-11-09" && /\(check the date\)$/.test(pk[0].title), `the letter whose period runs from receipt made one counted from its printed date, marked "check the date" (${JSON.stringify(pk)})`);
+      check(ofDoc("gym-letter").length === 0, "a vague request made none");
+      const gymNote = (await NB.notes()).find((n) => n.clerk_doc === ids["gym-letter"]);
+      check(!!gymNote && gymNote.content.includes("Return the signed membership form to Elm Row Fitness (no date given)"), "and it is in the note's key facts");
+      check(ofDoc("meter-letter").length === 0 && meter.tags.includes(tagIds["Check this"]), "no printed date to count from: no deadline, and the letter is to check");
+      const clinic = ofDoc("clinic-letter");
+      check(clinic.length === 1 && clinic[0].title === "Follow-up appointment reminder, 2026-10-14" && clinic[0].due === "2026-11-27", `F11: the letter kept out of the notebook has its deadline, named only by its title and date (${JSON.stringify(clinic)})`);
+      check(dl.length === wantDeadlines(ALEX.filter((s) => s !== "unusable-answer")), `no other deadline (${dl.length})`);
+      const said = await NB.remindersOn("2026-11-18");
+      check(said.includes("Pay the Brightwater Utilities electricity invoice of 212.40 EUR"), `Godspeed's own deadline reminders say it as its day comes (tools/due.js today on 18 November: ${JSON.stringify(said.slice(0, 300))})`);
+      check(/Deadlines: 5 made in Godspeed from your letters\./.test((await must(state, ["status"], env)).out), "status says how many deadlines the Clerk made");
     } else console.log("  SKIP  the notes, the collection and the message (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
 
     section("F8: changes in Paperless and by hand in the drive");
@@ -401,7 +494,7 @@ async function main() {
     await runUntilQuiet(state, env);
     check(fake.pathOf(oneFile(fake, "injection-letter")[0]?.id || "") === inj, "its file stays in the drive");
     check(outbox(state).filter((n) => n.kind === "deleted-in-paperless" && n.doc === ids["injection-letter"]).length === 1, "and the person will hear it once");
-    if (NB) check(TG.sent.length === 2 && /Deleted in Paperless, its file stays in your drive: "Garage space offer on Station Road"/.test(TG.sent[1]) && linksIn(TG.sent[1]).length === 1, `F16: one message names the deleted document, with one link (${JSON.stringify(TG.sent[1] || "")})`);
+    if (NB) check(TG.sent.length === base + 2 && /Deleted in Paperless, its file stays in your drive: "Garage space offer on Station Road"/.test(TG.sent[base + 1]) && linksIn(TG.sent[base + 1]).length === 1, `F16: one message names the deleted document, with one link (${JSON.stringify(TG.sent[base + 1] || "")})`);
     const record = (slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8"));
     check(!!record("injection-letter").gone, "its record says it is gone (Paperless answers 404 for a document in its bin)");
     await api(alexTok, "POST", "trash/", { action: "restore", documents: [ids["injection-letter"]] });
@@ -429,7 +522,7 @@ async function main() {
     check(!/LOST/.test((await must(state, ["status"], env)).out), "status no longer shows a loss");
     if (NB) {
       const last = TG.sent[TG.sent.length - 1] || "";
-      check(TG.sent.length === 3 && /Google Drive no longer lets the Clerk file your papers/.test(last) && last.includes(`"${ua.title}"`) && linksIn(last).length === 1,
+      check(TG.sent.length === base + 3 && /Google Drive no longer lets the Clerk file your papers/.test(last) && last.includes(`"${ua.title}"`) && linksIn(last).length === 1,
         `F16: lost access and the paper to check from that run came as one message with one link (${TG.sent.length}: ${JSON.stringify(last)})`);
       check((await NB.notes()).filter((x) => x.clerk_doc === ids["unusable-answer"]).length === 1, "F10: after reconnecting, the waiting document has its note");
     }
@@ -451,18 +544,35 @@ async function main() {
         "F11: adding it to a noted document with a line the person added leaves a note holding only that line");
       const ki = (await NB.items()).find((i) => i.source_id === sumOf("tax-assessment"));
       check(!!ki && JSON.stringify(Object.keys(ki.data).sort()) === JSON.stringify(["added", "folder", "status"]) && ki.data.status === "kept out of the notebook", "F17: its item shrinks to the kept-out form, without a title");
-      check(TG.sent.length === 3, "nothing in this to act on: no message");
+      check(TG.sent.length === base + 3, "nothing in this to act on: no message");
+    }
+
+    if (NB) {
+      section("F15: the person's own date, and a corrected letter date");
+      const one = async (slug) => (await NB.deadlines()).filter((x) => x.key.startsWith(keyOf(sumOf(slug), "")));
+      const moveByHand = (d, day) => { const f = path.join(NB.ws, "due", `${d.slug}.md`); fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace(/^(STRIP: \S+) \S+$/m, `$1 ${day}`)); };
+      // The person moves the water bill's day by hand, the way the deadline files are meant to be edited.
+      moveByHand((await one("water-invoice"))[0], "2026-11-27");
+      // The parking notice's date is corrected in Paperless: its untouched deadline, counted from it, moves.
+      await api(alexTok, "PATCH", `documents/${ids["parking-notice"]}/`, { created: "2026-10-12" });
+      await runUntilQuiet(state, env);
+      check((await one("parking-notice"))[0]?.due === "2026-11-12", "a corrected letter date moves the untouched deadline counted from it");
+      check((await one("water-invoice"))[0]?.due === "2026-11-27", "the deadline the person moved keeps the person's date");
+      moveByHand((await one("parking-notice"))[0], "2026-11-16");
+      await api(alexTok, "PATCH", `documents/${ids["parking-notice"]}/`, { created: "2026-10-13" });
+      await runUntilQuiet(state, env);
+      check((await one("parking-notice"))[0]?.due === "2026-11-16" && (await one("parking-notice")).length === 1, "once the person moved it, a corrected letter date leaves the person's date");
     }
 
     section("F18: the records deleted");
     const w2 = fake.writes.length, s2 = await snapshot();
-    const inNotebook = async () => (NB ? JSON.stringify([...(await NB.notes()), ...(await NB.items())].map((x) => `${x.id} ${x._hash}`).sort()) : "");
+    const inNotebook = async () => (NB ? JSON.stringify([...(await NB.notes()), ...(await NB.items())].map((x) => `${x.id} ${x._hash}`).sort().concat((await NB.deadlines()).map((d) => JSON.stringify(d)).sort())) : "");
     const nb2 = await inNotebook();
     fs.rmSync(path.join(state, "records"), { recursive: true, force: true });
     await runUntilQuiet(state, env);
     check(fake.writes.length === w2, "no second file, no move, no rename");
     check(await snapshot() === s2, "nothing changed in Paperless");
-    if (NB) check(await inNotebook() === nb2, "F10, F17: no second note or item, and not one rewritten");
+    if (NB) check(await inNotebook() === nb2, "F10, F15, F17: no second note, item or deadline, and not one rewritten; the person's dates stay");
 
     section("F14: private by default");
     const sentences = DOCS.flatMap((d) => kitText(d.slug).split(/[.\n]/).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 4));
@@ -474,7 +584,7 @@ async function main() {
     const strays = fs.readdirSync(state).filter((n) => !known.includes(n));
     check(strays.length === 0, `no temporary file: the state folder holds only the Clerk's own files${strays.length ? ` (${strays.join(", ")})` : ""}`);
     files.push(...["clerk.log", "state.json", "outbox.jsonl", "links.json"].map((n) => path.join(state, n)).filter(fs.existsSync));
-    const noteBits = NB ? (await NB.notes()).flatMap((n) => [n.clerk_summary, ...(n.clerk_facts || [])]).filter(Boolean) : [];
+    const noteBits = NB ? (await NB.notes()).flatMap((n) => [n.clerk_summary, ...(n.clerk_facts || []), ...((n.clerk_asks?.items || []).map((a) => a.ask))]).filter(Boolean).concat((await NB.deadlines()).map((d) => d.title.replace(/ \(check the date\)$/, ""))) : [];
     const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)) || noteBits.some((x) => b.includes(x)); });
     check(leaks.length === 0, `no log line, record or temporary file holds a sentence, a title or a note's summary${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");

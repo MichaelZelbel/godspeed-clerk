@@ -301,9 +301,12 @@ test("upgrade: a paper sorted under the batch-2 code gets its deadlines read onc
       for (const n of w.notesOf(slug)) w.nb.edit("notes", n.id, { clerk_asks: undefined, content: n.content.replace(/\n## Deadlines\n\n(- .*\n)+/, "\n") });
     }
     w.nb.clearDeadlines();
+    fs.writeFileSync(w.paths.state, JSON.stringify({ ...JSON.parse(fs.readFileSync(w.paths.state, "utf8")), notify: undefined }));
+    fs.rmSync(w.paths.outbox, { force: true });
     const sorting = () => w.prompts.filter((p) => p.system.startsWith("You sort")).length;
     const readings = () => w.prompts.filter((p) => p.system.startsWith("You summarise")).length;
     const sorted = sorting(), driveWrites = w.drive.writes.length;
+    const sent = w.messages.length;
     await w.run();
     assert.equal(readings(), 3, "the first run reads three: its batch");
     await w.runUntilQuiet();
@@ -313,6 +316,10 @@ test("upgrade: a paper sorted under the batch-2 code gets its deadlines read onc
     for (const slug of LETTERS) assert.deepEqual(of(w, slug).map((d) => [d.key.split("#")[1], d.title, d.due]).sort(), want[slug], slug);
     const facts = w.noteOf("library-reminder").content.split("## Key facts")[1].split("##")[0];
     assert.ok(facts.includes("already passed"), "a deadline that has passed goes into the key facts");
+    // What needs a check after the update comes as one message, once the reading is done.
+    const told = w.messages.slice(sent);
+    assert.equal(told.length, 1, told.join(" | "));
+    assert.ok(told[0].includes(`"${w.doc("parking-notice").title}"`) && told[0].includes(`"${w.doc("meter-letter").title}"`), told[0]);
     const all = w.nb.deadlineRows().length;
     await w.runUntilQuiet();
     assert.equal(readings(), LETTERS.length + 1, "read once");

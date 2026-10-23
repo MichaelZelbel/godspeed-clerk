@@ -16,8 +16,25 @@ added later trashes a note or leaves only the person's line), F12 (the letter th
 instruct the AI), F14 (no sentence, title or summary in the logs, records or temporary files),
 F16 (one message for the kit naming the blurry scan, none for a run with nothing new, one for a
 deletion, one for lost access; one link each), F17 (one item per document, a kept-out item without
-a title) and F18 (a real kill after each step, notes and items included, and in the middle of an
-upload; the records deleted).
+a title) and F18 (a real kill after each step, notes, items and deadlines included, and in the
+middle of an upload; the records deleted).
+
+F15 runs through the product's real add-on deadlines (`POST /api/functions/addon-deadlines`,
+`tools/due.js` in the checkout): the letter with a future date makes one deadline with the right
+date and a link, an ordinary file in the notebook's `due/`; two requests make two; a period from
+receipt makes one counted from the printed date and marked "check the date"; a vague request and
+a passed date make none and go into the note's key facts; no date to count from makes none and
+the letter is to check; the kept-out letter's deadline is named by its title and date; the
+product's own reminders (`tools/due.js today`) say it as its day comes; a corrected letter date
+moves an untouched deadline; one the person moved by hand keeps the person's date, also through a
+corrected date and lost records; both "only files" settings make the same deadlines. The Clerk
+counts from 22 October 2026 (`GODSPEED_CLERK_TODAY`, test mode only), the day the kit's letters
+are written for.
+
+`CLERK_PREVIOUS`, a checkout of an earlier Clerk (0.2), makes "Godspeed sorts" an upgrade: that
+version sorts, files and notes the kit first, then this one takes over. It checks that each paper
+is read once for its deadlines, that nothing is sorted or filed again, and that what needs a check
+comes as one message.
 
 ```
 docker compose -f test/full/compose.yaml up -d
