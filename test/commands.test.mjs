@@ -153,3 +153,18 @@ test("the run's summary says how many were noted, how far the notes are, and whe
   const line = summary({ copied: 1, sorted: 1, check: 0, filed: 1, noted: 2, progress: "5 of 5 sorted", notes_progress: "4 of 5 noted", waiting: 0, to_check: 0, messaged: 1, notes: [] });
   assert.equal(line, "1 copied to the drive, 1 sorted, 0 to check, 1 filed, 2 noted. 5 of 5 sorted, 4 of 5 noted; 0 waiting, 0 to check in all. One message sent.");
 });
+
+test("F10, F11: setup says where notes travel, that the tag must be set first, and that the notebook's history keeps earlier versions", async () => {
+  const pl = await startFakePaperless({ tags: [{ id: 1, name: "Inbox", is_inbox_tag: true }] });
+  try {
+    const dir = tmp();
+    const r = await cli(["setup", "--paperless", pl.url, "--user", "alex", "--godspeed", workspace(), "--no-service", "--no-copy", "--state", dir], { env: { ...modelEnv(), PAPERLESS_PASSWORD: "pw" } });
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /every document gets a note in your Godspeed notebook, in the folder "Documents", with its full text/);
+    assert.match(r.out, /Notes travel wherever your notebook syncs, for example a private Git repository/);
+    assert.match(r.out, /A document with the tag "Not in notebook" gets no note/);
+    assert.match(r.out, /set the tag before the note is written/);
+    assert.match(r.out, /the notebook's history .* keeps the earlier versions/);
+    assert.match(r.out, /item in the collection "Documents"/);
+  } finally { await pl.close(); }
+});
