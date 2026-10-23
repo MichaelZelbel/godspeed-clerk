@@ -58,3 +58,32 @@ test("private files are written whole and readable by their owner only", { skip:
   assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
   assert.equal(readJson(path.join(dir, "missing.json"), "fallback"), "fallback");
 });
+
+test("settings: batch 2 defaults and the new settings", () => {
+  const s = loadSettings(statePaths(tmp()));
+  assert.equal(s.notebook, true);
+  assert.equal(s.notebook_folder, "Documents");
+  assert.equal(s.collection, "Documents");
+  assert.equal(s.note_batch, 50);
+  assert.equal(s.notebook_down_hours, 6);
+  assert.equal(s.texts.kept_out_title, "Document kept out of the notebook");
+  assert.equal(s.texts.yours, "Your notes");
+  assert.equal(s.talk, null);
+  const t = setSetting(s, "texts.kept_out_title", "Kept out");
+  assert.equal(t.texts.kept_out_title, "Kept out");
+  assert.equal(t.texts.yours, "Your notes");
+  assert.deepEqual(setSetting(s, "talk", "[\"telegram\"]").talk, ["telegram"]);
+  assert.throws(() => setSetting(s, "talk", "[\"pigeon\"]"), /telegram or desktop/);
+  assert.throws(() => setSetting(s, "note_batch", "0"), /a whole number of 1 or more/);
+  assert.equal(setSetting(s, "notebook", "false").notebook, false);
+  assert.throws(() => setSetting(s, "texts.nonsense", "x"), /no setting/);
+});
+
+test("under node --test the default notebook door and real channels are never used", async () => {
+  const { buildContext } = await import("../lib/core/context.mjs");
+  const ctx = buildContext(statePaths(tmp()), { env: {} });
+  assert.equal(ctx.notebook, null);
+  assert.equal((await ctx.tell("a message")).delivered, false);
+  const named = buildContext(statePaths(tmp()), { env: { GODSPEED_CLERK_NOTEBOOK: "http://127.0.0.1:9" } });
+  assert.equal(named.notebook.base, "http://127.0.0.1:9");
+});
