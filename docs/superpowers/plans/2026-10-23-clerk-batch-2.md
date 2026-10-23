@@ -149,3 +149,20 @@
 - [ ] Test `setup says where notes travel, that the tag must be set first, and that the notebook's history keeps earlier versions`.
 - [ ] Full test: a real notebook from `GODSPEED_NOTEBOOK_CHECKOUT` (own workspace, own port, own HOME, every `GODSPEED_*` cleared), a pretend Telegram API; F4 modes write every note; the kit: one note and one item per document, kept-out letter without note and with an item without title, rename keeps the person's line, tag added later trashes or shrinks, records deleted makes nothing twice, kills at `after-note` and `after-item`, exactly one message naming the blurry scan, none on the next run. Without the checkout the notebook checks are reported as not run.
 - [ ] Run fast tests and the full test on the server; commit; push.
+
+## Changed after the independent review (2026-10-23)
+
+A reviewer with fresh made-up papers found twelve problems; fixed, each with a test seen failing:
+a kept-out paper that needs checking is reported and its item says "check this"; the Clerk finds
+its part by a mark of its words (`clerk_part`), so lines the person writes above it, or a heading
+of their own, are kept; a note the Clerk trashed comes back when the tag is taken off; what the
+notebook's own processing wrote about a kept-out letter comes out; a message names ten papers and
+counts the rest, keeps its link last, never takes a link from a title, and names a deleted
+kept-out paper by its file; documents sorted in a run are noted in that run (no second AI call);
+notes use only the escapes the notebook's reader understands; a paper to check gets its summary
+once it is sorted by hand; Telegram is not asked again after no answer in time.
+
+Left as they are, on purpose: the notebook down during the run that sorts costs one more AI call
+for each paper's summary later (the summary may be kept nowhere but the note); a document
+deleted in Paperless keeps its item as it was; the notebook's own processing reads every visible
+note (a product question, see the report).

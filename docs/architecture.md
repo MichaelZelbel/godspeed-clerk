@@ -119,13 +119,23 @@ the mark (`source_app: godspeed-clerk`, `clerk_doc`, `clerk_sum`), so a reinstal
 a rebuilt Paperless find the same note, never a second one. A note the person deleted is never
 made again (the notebook refuses its id); one in the trash stays there.
 
-The Clerk's part comes first and ends with its own heading ("Your notes", in the person's
-language, its words kept in the header as `clerk_yours`); everything below that heading is the
-person's and is kept exactly. The notebook's editor writes notes back through its own Markdown,
-which drops HTML comments, so the boundary is that visible heading. The full text sits in a fence
-longer than any run of backticks in it, and every value from Paperless or the AI is one line with
-its markup escaped, so nothing in a letter can look like the heading. A note whose heading the
-person removed, and that is no longer exactly what the Clerk wrote, is left as it is.
+The Clerk's part ends with its own heading ("Your notes", in the person's language, its words
+kept in the header as `clerk_yours`); what the person writes below it, or above the part, is
+theirs and is kept exactly. The notebook's editor writes notes back through its own Markdown
+(which drops HTML comments, changes list markers and escapes), so the part is found by its
+words: the header keeps `clerk_part`, a fingerprint of the part's words and numbers and how many
+there are, and the part is the stretch of whole lines ending with the Clerk's heading that has
+exactly that fingerprint. The full text sits in a fence longer than any run of backticks in it,
+and every value from Paperless or the AI is one line, escaped only where the notebook's own
+reader understands it, so nothing in a letter can look like the heading. A note whose Clerk's
+part the person changed inside is left as it is; kept out, only its title, summary and key facts
+come out, and the person hears it once.
+
+Kept out (F11), the person's lines stay under the title "Document kept out of the notebook"; a
+note with none goes to the notebook's trash (`clerk_trashed`), and comes back when the tag is
+taken off again. What the notebook's own processing wrote about the letter (the fields it names
+in `metadata.ai_fields`) comes out too. Suggestions that processing already put in the
+notebook's review queue are the notebook's and stay.
 
 The summary and key facts live in the note's header (`clerk_summary`, `clerk_facts`) and body,
 and nowhere else. They come from the AI answer that sorted the document; a document the Clerk did
