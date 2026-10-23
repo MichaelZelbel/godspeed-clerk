@@ -302,7 +302,8 @@ async function partA() {
   const again = await clerk("a", "copy", env);
   const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/(originals|archive)\//.test(p));
   check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.all.trim().replace(/\n/g, " | ")})`);
-  A.restoreAt = restore.made_at;
+  // (Every whole copy writes restore.json anew, with its time: the one to compare with is the last.)
+  A.restoreAt = JSON.parse(D.byPath("The Clerk/paperless/restore.json").content.toString()).made_at;
   A.snapshot = await snapshotOf(p, A.tok);
   A.plan = await readIn("a", "/var/lib/godspeed/clerk/plan.json");
   A.counts = { files: markedFiles(D).length, notes: (await S.notes()).length, items: (await S.items()).length, deadlines: (await S.deadlines()).length };

@@ -10,8 +10,10 @@ Paperless-ngx and files each one into the right folder of their own cloud drive.
 - How it is built: `docs/architecture.md`. The build plan of each batch: `docs/superpowers/plans/`.
 - Tests: `node --test "test/*.test.mjs"` (fast, no network, no Docker). The full test with a real
   Paperless in Docker: `test/full/README.md`, run by the `full` workflow. The machine test (the
-  install line on fresh Linux servers, a rebuild, a broken update): `test/machine/README.md`. The
-  GitHub workflows are switched off while the account cannot run Actions; run the tests locally.
+  install line on fresh Linux servers, a rebuild, a broken update): `test/machine/README.md`.
+- CI costs money (a private repository): every push runs the fast tests on Linux only; Windows and
+  macOS run by hand (workflow_dispatch) and on version tags; the Docker full test runs on main, on
+  tags and by hand. Push fewer, larger commits. A red run is a real failure: keep main green.
 
 House rules:
 
