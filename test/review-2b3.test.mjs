@@ -76,7 +76,10 @@ test("ROUND2 2: storage paths the person changed while the answer was \"no\" (or
   } finally { await w.close(); }
 });
 
-test("ROUND2 3: with Paperless or nobody sorting and the yes, the To sort page never lists papers the Clerk filed into their folders", async () => {
+test("ROUND2 3: with Paperless or nobody sorting and the yes, the To sort page lists exactly the papers without a storage path, and the message links to it", async () => {
+  // Until batch 4 there was no page in these settings (only a write to documents could make one
+  // exact, and F4 forbids that). F19's last bullet (PRD cbe871c4) settles it: the page is the papers
+  // without a storage path yet, and the message links to it there too, never to the collection.
   for (const sorting of ["paperless", "nobody"]) {
     const w = await kitWorld({ sorting, settings: yes });
     try {
@@ -90,14 +93,15 @@ test("ROUND2 3: with Paperless or nobody sorting and the yes, the To sort page n
       }
       Object.assign(w.doc("gym-letter"), { document_type: byName(w.pl.state.types, "Contract").id });
       await w.runUntilQuiet();
-      // (In these settings the Clerk makes no To sort page, since only a write to documents could
-      // make one exact; F4 forbids that. No page, no filed paper on it.)
-      const listed = view(w) ? w.pl.viewDocs(view(w).id).filter((id) => w.pl.doc(id).owner === 2) : [];
-      const filedListed = Object.keys(w.ids).filter((s) => listed.includes(w.ids[s]) && w.fileOf(s).length === 1 && folderOf(w, s) !== "Paperwork/To sort");
-      console.log(`ROUND2 3 (${sorting}): messages ${JSON.stringify(w.messages.map(countIn))}; the page lists ${listed.length} of Alex's papers, ${filedListed.length} of them filed in their folders (${filedListed.slice(0, 4).join(", ")}, ...)`);
-      assert.deepEqual(filedListed, [], `${sorting}: filed papers on the To sort page`);
-      if (w.messages.length && view(w)) assert.equal(listed.length, countIn(w.messages.at(-1)), `${sorting}: the page lists what the message counts`);
-      if (w.messages.length) assert.ok(!links(w.messages.at(-1)).some((l) => l.includes("/view/")), `${sorting}: the message never links to a page that is not exact`);
+      const v = view(w);
+      assert.ok(v, `${sorting}: a To sort page`);
+      const listed = w.pl.viewDocs(v.id).filter((id) => w.pl.doc(id).owner === 2).sort((a, b) => a - b);
+      const noPath = Object.values(w.ids).filter((id) => w.pl.doc(id).owner === 2 && (w.pl.doc(id).storage_path ?? null) === null).sort((a, b) => a - b);
+      console.log(`ROUND2 3 (${sorting}): messages ${JSON.stringify(w.messages.map(countIn))}; the page lists ${listed.length} of Alex's papers`);
+      assert.deepEqual(listed, noPath, `${sorting}: the page lists the papers without a storage path`);
+      assert.ok(w.messages.length >= 1, `${sorting}: the gym letter is told`);
+      assert.ok(links(w.messages.at(-1)).some((l) => l.endsWith(`/view/${v.id}`)), `${sorting}: the message links to the page`);
+      assert.ok(!links(w.messages.at(-1)).some((l) => l.includes("/collections/")), `${sorting}: never to the collection`);
     } finally { await w.close(); }
   }
 });
@@ -200,19 +204,24 @@ test("a saved view of the person's own named To sort is never changed; the Clerk
   } finally { await w.close(); }
 });
 
-test("switched to nobody sorting, the Clerk's page leaves the sidebar and the dashboard and lists nothing; with Godspeed sorting again it is back", async () => {
+test("switched to nobody sorting, the Clerk's page stays in the sidebar and on the dashboard and lists the papers without a storage path; with Godspeed sorting again, To sort's", async () => {
+  // Until batch 4 the page left the sidebar and listed nothing here; F19's last bullet (PRD
+  // cbe871c4) makes it the papers without a storage path in "Paperless sorts" and "nobody sorts".
   const w = await kitWorld({ only: ["blurry-scan", "council-letter"], settings: yes });
   try {
     await w.runUntilQuiet();
     const [v] = [...w.pl.state.savedViews.values()];
     writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "nobody" });
     await w.runUntilQuiet();
-    assert.deepEqual(w.pl.visibleViews(), { sidebar: [], dashboard: [] });
-    assert.deepEqual(w.pl.viewDocs(v.id), []);
+    assert.deepEqual(w.pl.visibleViews(), { sidebar: [v.id], dashboard: [v.id] });
+    assert.deepEqual(v.filter_rules.map((r) => [r.rule_type, r.value ?? null]), [[25, null]]);
+    // Both papers got a storage path while Godspeed sorted; a new one has none.
+    w.pl.addDoc({ id: 120, content: "A made-up note from the library.", title: "Scan 2026-10-22 20-00-00", original_file_name: "Scan 2026-10-22 20-00-00.pdf", tags: [1], owner: 2, created: "2026-10-22", added: "2026-10-22T20:00:00+02:00" });
+    assert.deepEqual(w.pl.viewDocs(v.id).filter((id) => w.pl.doc(id).owner === 2), [120]);
     writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "godspeed" });
     await w.runUntilQuiet();
     assert.deepEqual(w.pl.visibleViews(), { sidebar: [v.id], dashboard: [v.id] });
-    assert.deepEqual(w.pl.viewDocs(v.id), [w.ids["blurry-scan"]]);
+    assert.ok(w.pl.viewDocs(v.id).includes(w.ids["blurry-scan"]));
     assert.equal(w.pl.state.savedViews.size, 1);
   } finally { await w.close(); }
 });

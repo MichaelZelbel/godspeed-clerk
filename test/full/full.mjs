@@ -304,9 +304,16 @@ async function main() {
       } else {
         const sp = await all(alexTok, "storage_paths/"), views = await all(alexTok, "saved_views/");
         check(sp.some((x) => x.name === "To sort") && sp.some((x) => x.name === "Letters"), `F4, F19: with the yes, the storage paths are made, and nothing of a document changes (${sp.map((x) => x.name).join(", ")})`);
-        // No To sort page: without writing to documents (F4) no page could list exactly the papers
-        // waiting, so the message links to the collection, which does (F16).
-        check(JSON.stringify(views) === JSON.stringify(views0) && TG.sent.every((m) => !/\/view\/\d+/.test(m)), `F4, F16: no To sort page that could list filed papers, and no message links to one (${TG.sent.length} message(s))`);
+        // F19's last bullet: the To sort page is the papers without a storage path yet (the Clerk
+        // writes no document here), and a message about papers to sort links to it, never to the
+        // notebook's collection.
+        const page = views.find((v) => !views0.some((x) => x.id === v.id));
+        const ui = (await api(alexTok, "GET", "ui_settings/")).settings?.saved_views || {};
+        const told = TG.sent.filter((m) => /waiting to be sorted/.test(m));
+        check(!!page && page.name === "To sort" && JSON.stringify(page.filter_rules.map((r) => [r.rule_type, r.value ?? null])) === JSON.stringify([[25, null]])
+          && (ui.sidebar_views_visible_ids || []).includes(page.id) && (ui.dashboard_views_visible_ids || []).includes(page.id),
+          `F19: in "Paperless sorts" the To sort page is the papers without a storage path, in the sidebar and on the dashboard (${page ? JSON.stringify(page.filter_rules) : "no page"})`);
+        check(told.every((m) => m.includes(`/view/${page?.id}`) && !/\/view\/\d+\d/.test(m.replace(`/view/${page?.id}`, "")) && !/\/collections\//.test(m)),`F16, F19: a message about papers to sort links to that page, never to the collection (${told.length} such message(s))`);
       }
       const here = ALEX.filter((s) => !HELD_BACK.includes(s));
       check(here.every((s) => oneFile(fake, s).length === 1), `every document is filed, once (${here.length})`);
@@ -689,12 +696,17 @@ async function main() {
       const page = (await all(alexTok, "saved_views/")).find((v) => v.name === "To sort");
       const toSortId = (await all(alexTok, "storage_paths/")).find((x) => x.name === "To sort")?.id;
       const shown = async () => { const u = (await api(alexTok, "GET", "ui_settings/")).settings?.saved_views || {}; return [(u.sidebar_views_visible_ids || []).includes(page?.id), (u.dashboard_views_visible_ids || []).includes(page?.id)]; };
-      const listed = async () => { const v = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id); const q = (v?.filter_rules || []).map((r) => (r.rule_type === 25 ? `storage_path__id=${r.value}` : r.rule_type === 31 ? `storage_path__id__none=${r.value}` : `unknown=${r.rule_type}`)).join("&"); return (await api(alexTok, "GET", `documents/?${q}&fields=id`)).count; };
+      const listed = async () => { const v = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id); const q = (v?.filter_rules || []).map((r) => (r.rule_type === 25 ? (r.value === null || r.value === undefined ? "storage_path__isnull=1" : `storage_path__id=${r.value}`) : r.rule_type === 31 ? `storage_path__id__none=${r.value}` : `unknown=${r.rule_type}`)).join("&"); return (await api(alexTok, "GET", `documents/?${q}&fields=id`)).count; };
       const s3 = await snapshot();
       await must(state, ["settings", "sorting", "nobody"], env);
       await runUntilQuiet(state, env);
       check(await snapshot() === s3, "with \"nobody sorts\", nothing of a document changes");
-      check(JSON.stringify(await shown()) === JSON.stringify([false, false]) && await listed() === 0, "the Clerk's To sort page leaves the sidebar and the dashboard and lists nothing, since it could no longer be exact");
+      // F19's last bullet: with nobody sorting the page is the papers without a storage path yet,
+      // still in the sidebar and on the dashboard (until batch 4 it left them and listed nothing).
+      const rulesNow = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id)?.filter_rules || [];
+      const noPathCount = (await api(alexTok, "GET", "documents/?storage_path__isnull=1&fields=id")).count;
+      check(JSON.stringify(await shown()) === JSON.stringify([true, true]) && JSON.stringify(rulesNow.map((r) => [r.rule_type, r.value ?? null])) === JSON.stringify([[25, null]]) && await listed() === noPathCount,
+        `with "nobody sorts" the Clerk's To sort page stays in the sidebar and on the dashboard and lists the papers without a storage path (${noPathCount})`);
       await must(state, ["settings", "sorting", "godspeed"], env);
       await runUntilQuiet(state, env);
       const v = (await all(alexTok, "saved_views/")).find((x) => x.id === page?.id);

@@ -259,3 +259,73 @@ test("F18: with the records lost, storage paths that stand for where the files a
     assert.equal(JSON.stringify(readJson(w.paths.plan)), plan);
   } finally { await w.close(); }
 });
+
+// F19's last bullet (batch 4, the open item from batch 2b): in "Paperless sorts" and "nobody sorts"
+// the Clerk changes no document, so its To sort page is a saved view of the papers that have no
+// storage path yet; the message links to it there too, never to the notebook's collection.
+const NO_PATH = [{ rule_type: 25, value: null }];
+const linksIn = (m) => String(m).match(/https?:\/\/\S+/g) || [];
+// Paperless (or the person) sorted the papers before the Clerk ran: the gym letter as a Contract,
+// a type the plan has no folder for, so it is the paper to sort.
+function sortedInPaperless(w) {
+  const byName = (m, n) => [...m.values()].find((x) => x.name === n);
+  Object.assign(w.doc("utility-invoice"), { document_type: byName(w.pl.state.types, "Invoice").id, created: "2025-09-03" });
+  Object.assign(w.doc("gym-letter"), { document_type: byName(w.pl.state.types, "Contract").id, created: "2025-09-03" });
+}
+
+test("F19: with Paperless or nobody sorting and the yes, the To sort page lists the papers without a storage path, in the sidebar and on the dashboard, and the message links to it", async () => {
+  for (const sorting of ["paperless", "nobody"]) {
+    const w = await kitWorld({ sorting, only: ["gym-letter", "utility-invoice", "council-letter"], settings: yes });
+    try {
+      sortedInPaperless(w);
+      await w.runUntilQuiet();
+      const v = view(w);
+      assert.ok(v, `${sorting}: a To sort page`);
+      assert.equal(v.name, "To sort");
+      assert.deepEqual(v.filter_rules.map((r) => ({ rule_type: r.rule_type, value: r.value ?? null })), NO_PATH, `${sorting}: one rule, no storage path`);
+      assert.deepEqual(w.pl.visibleViews(), { sidebar: [v.id], dashboard: [v.id] }, `${sorting}: in the sidebar and on the dashboard`);
+      const alex = Object.keys(w.ids).filter((s) => w.doc(s).owner === 2).map((s) => w.ids[s]).sort((a, b) => a - b);
+      assert.deepEqual(w.pl.viewDocs(v.id).filter((id) => w.pl.doc(id).owner === 2).sort((a, b) => a - b), alex, `${sorting}: every paper without a storage path (the Clerk writes none here)`);
+      const told = w.messages.filter((m) => /waiting to be sorted/.test(m));
+      assert.ok(told.length >= 1, `${sorting}: the papers to sort are told`);
+      for (const m of told) {
+        assert.ok(linksIn(m).some((l) => l.endsWith(`/view/${v.id}`)), `${sorting}: the message links to the To sort page: ${m}`);
+        assert.ok(!linksIn(m).some((l) => /\/collections\//.test(l)), `${sorting}: never to the notebook's collection`);
+      }
+    } finally { await w.close(); }
+  }
+});
+
+test("F19: with nobody sorting and the person's no, no page is made and the message links to Paperless's list of papers without a storage path", async () => {
+  const w = await kitWorld({ sorting: "nobody", only: ["gym-letter", "utility-invoice"], settings: { storage_paths: "no" } });
+  try {
+    sortedInPaperless(w);
+    await w.runUntilQuiet();
+    assert.equal(w.pl.state.savedViews.size, 0, "no saved view");
+    assert.equal(w.pl.state.storagePaths.size, 0, "no storage path");
+    const told = w.messages.filter((m) => /waiting to be sorted/.test(m));
+    assert.ok(told.length >= 1, "told");
+    assert.ok(linksIn(told.at(-1)).some((l) => l.endsWith("/documents?storage_path__isnull=1")), told.at(-1));
+    assert.ok(!linksIn(told.at(-1)).some((l) => /\/collections\//.test(l)), "never the collection");
+  } finally { await w.close(); }
+});
+
+test("F19: the To sort page follows the sorting setting: Godspeed's To sort path, then no storage path, then To sort again", async () => {
+  const w = await kitWorld({ only: ["blurry-scan", "utility-invoice"], settings: yes });
+  try {
+    await w.runUntilQuiet();
+    const v = view(w);
+    const toSort = spNamed(w, "To sort").id;
+    assert.deepEqual(v.filter_rules.map((r) => [r.rule_type, String(r.value)]), [[25, String(toSort)]]);
+    const s = readJson(w.paths.settings);
+    writeJson(w.paths.settings, { ...s, sorting: "nobody" });
+    await w.run();
+    assert.deepEqual(view(w).filter_rules.map((r) => ({ rule_type: r.rule_type, value: r.value ?? null })), NO_PATH);
+    assert.deepEqual(w.pl.visibleViews(), { sidebar: [v.id], dashboard: [v.id] }, "still shown");
+    assert.equal(w.pl.state.savedViews.size, 1, "the same page, no second one");
+    writeJson(w.paths.settings, { ...readJson(w.paths.settings), sorting: "godspeed" });
+    await w.run();
+    assert.deepEqual(view(w).filter_rules.map((r) => [r.rule_type, String(r.value)]), [[25, String(toSort)]]);
+    assert.deepEqual(w.pl.viewDocs(v.id), [w.ids["blurry-scan"]]);
+  } finally { await w.close(); }
+});
