@@ -33,7 +33,8 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
   const titleOf = (item) => {
     const coll = tables.collections.get(item.collection_id);
     const primary = (coll?.field_schema || []).find((f) => f.primary);
-    return (primary && item.data?.[primary.key]) || item.title || "Untitled";
+    // As the real notebook: the primary column's value, else "Untitled" (checked against it).
+    return (primary && item.data?.[primary.key]) || "Untitled";
   };
 
   function execute({ table, operation = "select", values, filters = [], expected = {} }) {

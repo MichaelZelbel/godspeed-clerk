@@ -189,3 +189,23 @@ test("status says how far the notes are, where the notebook is, and where messag
     assert.match(statusReport(w.paths, { env: {}, home: w.paths.root }), /Notebook: NOT answering since \d{4}-/);
   } finally { await w.close(); }
 });
+
+test("a kept-out paper the Clerk could not place is still reported, and its item says check this without a title", async () => {
+  const unsure = { slug: "kept-unsure", owner: "alex", upload: { tags: ["Not in notebook"] }, content: "Marlow Clinic. Results of your scan, reference KEPT-UNSURE-1. Addressed to Alex Morgan, 12 Elm Row, 40210 Fairford. Please call us to talk about them." };
+  const byHand = { slug: "kept-contract", owner: "alex", content: "Westbrook Storage. Your storage unit contract, unit 14B, reference KEPT-CONTRACT-2, starts on 1 May 2025 for Alex Morgan.",
+    presorted: { title: "Storage unit contract", correspondent: "Westbrook Storage", document_type: "Contract", tags: ["Not in notebook"], created: "2025-04-20" } };
+  for (const [sorting, doc] of [["godspeed", unsure], ["nobody", byHand]]) {
+    const w = await kitWorld({ sorting, only: [], extra: [doc], answers: [{ match: ["Pick the folder"], answer: { folder: null, confident: false } }] });
+    try {
+      await w.runUntilQuiet();
+      assert.match(w.pathOf(doc.slug), /^Paperwork\/To sort\//, sorting);
+      assert.equal(w.messages.length, 1, `${sorting}: one message`);
+      assert.ok(w.messages[0].includes(`"${w.doc(doc.slug).title}"`), w.messages[0]);
+      const it = w.nb.rows("collection_items").find((i) => i.source_id === w.record(doc.slug).sum);
+      assert.equal(it.data.status, "check this", sorting);
+      assert.equal(it.data.title, undefined);
+      assert.deepEqual(Object.keys(it.data).sort(), ["added", "folder", "status"]);
+      assert.equal(w.notesOf(doc.slug).length, 0);
+    } finally { await w.close(); }
+  }
+});

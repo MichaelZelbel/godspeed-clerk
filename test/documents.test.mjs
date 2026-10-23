@@ -80,7 +80,9 @@ test("F11: an item shrinks to its kept-out form when the tag is added", async ()
     await w.runUntilQuiet();
     const it = itemOf(w, "council-letter");
     assert.deepEqual(it.data, { added: "2026-10-22", folder: "Letters", status: "kept out of the notebook" });
+    assert.equal(it.title, "Untitled", "the notebook shows no title for it");
     assert.ok(!JSON.stringify(it).includes("Fairford Borough Council"));
+    assert.ok(!JSON.stringify(it).includes("Changes to the waste collection"));
   } finally { await w.close(); }
 });
 
