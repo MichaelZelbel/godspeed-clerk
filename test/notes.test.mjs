@@ -310,3 +310,21 @@ test("the notebook's editor writing the Clerk's part back its own way is not a c
     assert.match(after.content, /\n## Your notes\n\n+Paid on 25 March\.\n$/);
   } finally { await w.close(); }
 });
+
+test("taking the tag off again brings back the note the Clerk put in the trash", async () => {
+  const w = await kitWorld({ only: ["council-letter"] });
+  try {
+    await w.runUntilQuiet();
+    const n = w.noteOf("council-letter");
+    change(w, "council-letter", { tags: [...w.doc("council-letter").tags, tagId(w, KEEP_OUT)] });
+    await w.runUntilQuiet();
+    assert.equal(w.nb.row("notes", n.id).is_trashed, true);
+    change(w, "council-letter", { tags: w.doc("council-letter").tags.filter((t) => t !== tagId(w, KEEP_OUT)) });
+    await w.runUntilQuiet();
+    const back = w.nb.row("notes", n.id);
+    assert.equal(back.is_trashed, false);
+    assert.equal(back.title, n.title);
+    assert.ok(back.content.includes("Waste and Recycling"));
+    assert.equal(w.notesOf("council-letter").length, 1);
+  } finally { await w.close(); }
+});
