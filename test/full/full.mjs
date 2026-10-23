@@ -9,12 +9,19 @@
 //   node test/full/full.mjs
 //
 // PAPERLESS_URL (default http://127.0.0.1:8000) and KIT_RENDERED (default test/kit/rendered).
+// GODSPEED_NOTEBOOK_CHECKOUT: a checkout of the Godspeed product (MichaelZelbel/godspeed-mission-
+// control); its notebook is started for the test in a folder of its own, on a port of its own,
+// with every GODSPEED_* variable cleared (NOTEBOOK_NODE: the Node it runs on, default this one).
+// Without it the notes are not tested, and the Clerk gets an address where nothing answers, so it
+// can never reach a notebook that belongs to someone. Messages go to a pretend Telegram API.
 // The test itself does what the Clerk never does: it makes users, uploads, deletes a document.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import http from "node:http";
+import net from "node:net";
 import { startFakeDrive } from "../fakes/drive.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -30,6 +37,9 @@ const HELD_BACK = ["roofing-invoice", "pay-slip", "unusable-answer"];
 const ALEX = DOCS.filter((d) => d.owner === "alex").map((d) => d.slug);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), `clerk-full-${p}-`));
+
+const CHECKOUT = process.env.GODSPEED_NOTEBOOK_CHECKOUT ? path.resolve(process.env.GODSPEED_NOTEBOOK_CHECKOUT) : null;
+const NOBODY = "http://127.0.0.1:9"; // nothing answers here
 
 let failures = 0, passes = 0;
 function check(ok, what) {
@@ -117,6 +127,48 @@ async function refreshNames() {
   typeIds = Object.fromEntries((await all(alexTok, "document_types/")).map((t) => [t.name, t.id]));
 }
 
+// ------------------------------------------------------------------ a real notebook, a pretend Telegram
+const freePort = () => new Promise((r) => { const srv = net.createServer(); srv.listen(0, "127.0.0.1", () => { const { port } = srv.address(); srv.close(() => r(port)); }); });
+async function startNotebook() {
+  if (!CHECKOUT) return null;
+  const ws = tmp("notebook"), home = tmp("notebook-home"), port = await freePort();
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(GODSPEED_|HERMES_)/i.test(k)));
+  Object.assign(env, { GODSPEED_WORKSPACE: ws, GODSPEED_PORT: String(port), GODSPEED_FOOD_TABLE: "off", HOME: home, USERPROFILE: home });
+  const log = fs.openSync(path.join(home, "notebook.log"), "a");
+  const child = spawn(process.env.NOTEBOOK_NODE || process.execPath, [path.join(CHECKOUT, "notebook", "server", "main.mjs")], { env, stdio: ["ignore", log, log] });
+  const url = `http://127.0.0.1:${port}`;
+  for (const until = Date.now() + 90000; ;) {
+    try { if ((await fetch(`${url}/health`)).ok) break; } catch { /* not yet */ }
+    if (Date.now() > until || child.exitCode !== null) throw new Error(`the notebook did not start: ${fs.readFileSync(path.join(home, "notebook.log"), "utf8").slice(-800)}`);
+    await sleep(500);
+  }
+  const query = async (body) => { const r = await fetch(`${url}/api/query`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.error) throw new Error(`notebook: ${r.status} ${j.error}`); return j.data; };
+  return {
+    url, query,
+    notes: async () => (await query({ table: "notes", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] })),
+    items: async () => {
+      const colls = await query({ table: "collections", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] });
+      return colls.length ? query({ table: "collection_items", operation: "select", filters: [["eq", "collection_id", colls[0].id]] }) : [];
+    },
+    collections: () => query({ table: "collections", operation: "select", filters: [["eq", "source_app", "godspeed-clerk"]] }),
+    stop: () => new Promise((r) => { if (child.exitCode !== null) return r(); child.once("exit", r); child.kill(); }),
+  };
+}
+async function startTelegram() {
+  const sent = [];
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => { if (/\/sendMessage$/.test(req.url)) sent.push(JSON.parse(raw || "{}").text); res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ ok: true, result: { message_id: sent.length } })); });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const env = path.join(tmp("hermes"), "hermes", ".env");
+  fs.mkdirSync(path.dirname(env), { recursive: true });
+  fs.writeFileSync(env, "TELEGRAM_BOT_TOKEN=999:made-up-for-the-test\nTELEGRAM_HOME_CHANNEL=1001\n");
+  return { url: `http://127.0.0.1:${server.address().port}`, env, sent, close: () => new Promise((r) => { server.closeAllConnections?.(); server.close(r); }) };
+}
+let NB = null, TG = null;
+
 // ------------------------------------------------------------------ the Clerk, as its own process
 const WORK = tmp("work");
 const ANSWERS = path.join(WORK, "answers.json");
@@ -129,7 +181,9 @@ function clerk(state, args, env = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(ROOT, "bin", "godspeed-clerk.mjs"), ...args, "--state", state], {
       env: { ...process.env, GODSPEED_MODEL_COMMAND: path.join(ROOT, "test", "fakes", "model.mjs"), GODSPEED_CLERK_FAKE_ANSWERS: ANSWERS,
-        GODSPEED_CLERK_FAKE_PROMPTS: path.join(WORK, "prompts.jsonl"), PAPERLESS_PASSWORD: PW.alex, GODSPEED_CLERK_UPLOAD_CHUNK: "65536", ...env },
+        GODSPEED_CLERK_FAKE_PROMPTS: path.join(WORK, "prompts.jsonl"), PAPERLESS_PASSWORD: PW.alex, GODSPEED_CLERK_UPLOAD_CHUNK: "65536",
+        // Never a real notebook or a real bot: the test's own, or nothing.
+        GODSPEED_CLERK_NOTEBOOK: NB?.url || NOBODY, GODSPEED_CLERK_TELEGRAM_API: TG?.url || NOBODY, GODSPEED_CLERK_TEST: "1", ...env },
     });
     let out = "", err = "";
     child.stdout.on("data", (d) => (out += d));
@@ -146,7 +200,7 @@ async function runUntilQuiet(state, env, max = 10) {
   let last;
   for (let i = 0; i < max; i++) {
     last = await must(state, ["run"], env);
-    const m = last.out.match(/(\d+) copied to the drive, (\d+) sorted, (\d+) to check, (\d+) filed\. .*?; (\d+) waiting/);
+    const m = last.out.match(/(\d+) copied to the drive, (\d+) sorted, (\d+) to check, (\d+) filed, (\d+) noted\. .*?; (\d+) waiting/);
     if (!m || m.slice(1).every((x) => x === "0")) break;
   }
   return last;
@@ -165,6 +219,8 @@ async function setUp(mode, fake) {
   await must(state, ["settings", "about", KIT.profile], env);
   await must(state, ["settings", "tag_rules", JSON.stringify(KIT.paperless.tag_rules)], env);
   await must(state, ["settings", "settle_minutes", "0"], env);
+  await must(state, ["settings", "talk", JSON.stringify(["telegram"])], env);
+  if (TG) await must(state, ["settings", "telegram_env", TG.env], env);
   await connectDrive(state, fake);
   await must(state, ["drive", "folder", "Paperwork"], env);
   const p = await must(state, ["plan", "propose"], env);
@@ -196,6 +252,8 @@ async function main() {
   for (const mode of ["nobody", "paperless"]) {
     section(`F4: "${mode === "nobody" ? "nobody sorts" : "Paperless sorts"}"`);
     const fake = await startFakeDrive({ tree: KIT.drive.tree, account: KIT.drive.account });
+    NB = await startNotebook();
+    TG = await startTelegram();
     try {
       const before = await snapshot();
       const { state, env } = await setUp(mode, fake);
@@ -205,13 +263,23 @@ async function main() {
       check(here.every((s) => oneFile(fake, s).length === 1), `every document is filed, once (${here.length})`);
       check(fake.pathOf(oneFile(fake, "bank-certificate")[0]?.id || "") === "Paperwork/Taxes/2024/2025-02-14 Yearly tax certificate 2024.pdf", "the document sorted before goes where the plan says");
       check(oneFile(fake, "second-account-letter").length === 0, "the other account's document is not copied");
-    } finally { await fake.close(); }
+      if (NB) {
+        const notes = await NB.notes();
+        const want = here.filter((s) => !expected(s).not_in_notebook);
+        check(notes.length === want.length && want.every((s) => notes.filter((n) => n.clerk_doc === ids[s]).length === 1), `F4, F10: every note is still written, one per document (${notes.length} of ${want.length}), the kept-out letter none`);
+        check((await NB.items()).length === here.length, "F17: one collection item per document");
+      } else console.log("  SKIP  the notes (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
+    } finally { await fake.close(); await NB?.stop(); await TG.close(); NB = null; TG = null; }
   }
 
   section("Godspeed sorts: the plan, the first copies");
   const fake = await startFakeDrive({ tree: KIT.drive.tree, account: KIT.drive.account });
+  NB = await startNotebook();
+  TG = await startTelegram();
   try {
     const { state, env } = await setUp("godspeed", fake);
+    const sumOf = (slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8")).sum;
+    const linksIn = (m) => m.match(/https?:\/\/\S+/g) || [];
     const plan = JSON.parse(fs.readFileSync(path.join(state, "plan.json"), "utf8"));
     const tops = Object.keys(KIT.drive.tree.Paperwork);
     const kitTypes = [...new Set(ALEX.map((s) => expected(s).document_type).filter(Boolean))];
@@ -228,7 +296,7 @@ async function main() {
 
     section("F18: killed after each step in turn, and in the middle of an upload");
     await upload(["roofing-invoice", "pay-slip"]);
-    for (const point of ["after-copy", "mid-upload", "after-sort", "after-file"]) {
+    for (const point of ["after-copy", "mid-upload", "after-sort", "after-file", ...(NB ? ["after-note", "after-item"] : [])]) {
       const r = await clerk(state, ["run"], { ...env, GODSPEED_CLERK_CRASH_AT: point });
       check(r.signal === "SIGKILL", `killed at ${point}`);
     }
@@ -266,7 +334,47 @@ async function main() {
     check(JSON.stringify(madeFolders) === JSON.stringify(["Paperwork/Invoices/Hollis Roofing", "Paperwork/Payslips/2025", "Paperwork/Taxes/2024", "Paperwork/To sort"]), `no stray folder: only the new sender, the missing years and To sort were made (${madeFolders.join(", ")})`);
     check(!fake.files().some((f) => / Scan d{4}-/.test(f.name) && !fake.pathOf(f.id).startsWith("Paperwork/To sort/")), "no file named after its scan outside To sort");
 
+    if (NB) {
+      section("F10, F11, F16, F17: the notes, the Documents collection, the message");
+      const notes = await NB.notes(), items = await NB.items();
+      const noteOf = (slug) => notes.filter((n) => n.clerk_doc === ids[slug]);
+      let one = true, text = true, links = true, sums = true, fields = true;
+      for (const slug of done) {
+        const e = expected(slug), n = noteOf(slug), d = await doc(slug);
+        const it = items.filter((i) => i.source_id === sumOf(slug));
+        if (it.length !== 1) { fields = false; console.log(`        ${slug}: ${it.length} items`); continue; }
+        if (e.not_in_notebook) {
+          check(n.length === 0, `F11: ${slug}, uploaded with "Not in notebook", is sorted and filed but has no note`);
+          check(JSON.stringify(Object.keys(it[0].data).sort()) === JSON.stringify(["added", "folder", "status"]) && it[0].data.status === "kept out of the notebook" && it[0].data.folder === e.folder,
+            `F17: its item has no title, only when it was added, its folder and its status (${JSON.stringify(it[0].data)})`);
+          continue;
+        }
+        if (n.length !== 1 || n[0].folder_path !== "Documents" || n[0].title !== d.title) { one = false; console.log(`        ${slug}: ${n.length} notes${n[0] ? `, folder ${n[0].folder_path}, title ${n[0].title === d.title ? "as in Paperless" : "different"}` : ""}`); continue; }
+        if (!n[0].content.includes(String(d.content || "").replace(/\r\n?/g, "\n").replace(/\s+$/, ""))) text = false;
+        const f = oneFile(fake, slug)[0];
+        if (!n[0].content.includes(`(${PL}/documents/${ids[slug]}/details)`) || !n[0].content.includes(`(https://drive.google.com/file/d/${f.id}/view)`)) links = false;
+        if (!e.check && !DOCS.find((x) => x.slug === slug).presorted && !n[0].clerk_summary) sums = false;
+        const data = it[0].data;
+        const okItem = data.title === d.title && data.folder === e.folder && data.status === (e.check ? "check this" : "sorted") && data.in_drive === true
+          && data.paperless === `${PL}/documents/${ids[slug]}/details` && data.drive === `https://drive.google.com/file/d/${f.id}/view` && data.note.endsWith(`/dashboard/notes/${n[0].id}`);
+        if (!okItem) { fields = false; console.log(`        ${slug}: item ${JSON.stringify(data)}`); }
+      }
+      check(one, "F10: exactly one note per document, in the folder Documents, titled as in Paperless");
+      check(text, "F10: each note holds the document's full text as Paperless read it");
+      check(links, "F10: each note links to the document in Paperless and to its file in the drive");
+      check(sums, "F10: every document the Clerk sorted has its summary in the note");
+      check(items.length === done.length && fields, `F17: one item per document with every field as its expected-result file says (${items.length} of ${done.length})`);
+      check((await NB.collections()).length === 1 && (await NB.collections())[0].name === "Documents", "F17: one collection, \"Documents\"");
+      const blurry = await doc("blurry-scan");
+      check(TG.sent.length === 1 && TG.sent[0].includes(`"${blurry.title}"`) && linksIn(TG.sent[0]).length === 1, `F16: the run over the kit sent exactly one message, naming the blurry document, with one link (${TG.sent.length}: ${JSON.stringify(TG.sent[0] || "")})`);
+      await must(state, ["run"], env);
+      check(TG.sent.length === 1, "F16: a second run with nothing new sends none");
+    } else console.log("  SKIP  the notes, the collection and the message (GODSPEED_NOTEBOOK_CHECKOUT is not set)");
+
     section("F8: changes in Paperless and by hand in the drive");
+    // The person adds a line of their own to a note, as in the notebook's editor.
+    const mine = NB ? (await NB.notes()).find((x) => x.clerk_doc === ids["utility-invoice"]) : null;
+    if (mine) await NB.query({ table: "notes", operation: "update", values: { content: `${mine.content}\nPaid on 25 March, checked against the bank statement.\n` }, filters: [["eq", "id", mine.id]], expected: { [mine.id]: mine._hash } });
     await api(alexTok, "PATCH", `documents/${ids["utility-invoice"]}/`, { title: "Electricity bill for February" });
     const council = oneFile(fake, "council-letter")[0];
     fake.userMove(council.id, "Paperwork/Insurance");
@@ -275,6 +383,15 @@ async function main() {
     await runUntilQuiet(state, env);
     check(fake.pathOf(oneFile(fake, "utility-invoice")[0].id) === "Paperwork/Invoices/Brightwater Utilities/2025-03-04 Electricity bill for February.pdf", "renaming a document in Paperless renames its file");
     check(fake.pathOf(council.id) === `Paperwork/Insurance/${councilName}`, "a file moved by hand stays where it was put after its title changes");
+    if (mine) {
+      const n = (await NB.notes()).filter((x) => x.clerk_doc === ids["utility-invoice"]);
+      check(n.length === 1 && n[0].id === mine.id && n[0].title === "Electricity bill for February" && /\nPaid on 25 March, checked against the bank statement\.\n?$/.test(n[0].content) && n[0].content.split("Paid on 25 March").length === 2,
+        "F10: renaming a document updates the same note and keeps the line the person added");
+      const it = (await NB.items()).filter((i) => i.source_id === sumOf("utility-invoice"));
+      check(it.length === 1 && it[0].data.title === "Electricity bill for February", "F17: renaming a document updates its item");
+      const cn = (await NB.notes()).filter((x) => x.clerk_doc === ids["council-letter"]);
+      check(cn.length === 1 && cn[0].content.includes("Insurance"), "the note of a file moved by hand names the folder it is in now");
+    }
 
     section("F8: a document deleted in Paperless");
     const inj = fake.pathOf(oneFile(fake, "injection-letter")[0].id);
@@ -282,6 +399,7 @@ async function main() {
     await runUntilQuiet(state, env);
     check(fake.pathOf(oneFile(fake, "injection-letter")[0]?.id || "") === inj, "its file stays in the drive");
     check(outbox(state).filter((n) => n.kind === "deleted-in-paperless" && n.doc === ids["injection-letter"]).length === 1, "and the person will hear it once");
+    if (NB) check(TG.sent.length === 2 && /Deleted in Paperless, its file stays in your drive: "Garage space offer on Station Road"/.test(TG.sent[1]) && linksIn(TG.sent[1]).length === 1, `F16: one message names the deleted document, with one link (${JSON.stringify(TG.sent[1] || "")})`);
     const record = (slug) => JSON.parse(fs.readFileSync(path.join(state, "records", `${ids[slug]}.json`), "utf8"));
     check(!!record("injection-letter").gone, "its record says it is gone (Paperless answers 404 for a document in its bin)");
     await api(alexTok, "POST", "trash/", { action: "restore", documents: [ids["injection-letter"]] });
@@ -307,13 +425,42 @@ async function main() {
     check(oneFile(fake, "unusable-answer").length === 1 && /^Paperwork\/To sort\//.test(fake.pathOf(oneFile(fake, "unusable-answer")[0].id)), "after reconnecting the waiting document is filed once, into To sort");
     check(fake.writes.slice(writes).filter((w) => w.op === "upload").length === 1, "exactly one upload after reconnecting");
     check(!/LOST/.test((await must(state, ["status"], env)).out), "status no longer shows a loss");
+    if (NB) {
+      const last = TG.sent[TG.sent.length - 1] || "";
+      check(TG.sent.length === 3 && /Google Drive no longer lets the Clerk file your papers/.test(last) && last.includes(`"${ua.title}"`) && linksIn(last).length === 1,
+        `F16: lost access and the paper to check from that run came as one message with one link (${TG.sent.length}: ${JSON.stringify(last)})`);
+      check((await NB.notes()).filter((x) => x.clerk_doc === ids["unusable-answer"]).length === 1, "F10: after reconnecting, the waiting document has its note");
+    }
+
+    if (NB) {
+      section("F11: the tag added to documents that already have a note");
+      const keep = tagIds["Not in notebook"];
+      const notes = await NB.notes();
+      const taNote = notes.find((x) => x.clerk_doc === ids["tax-assessment"]);
+      const psNote = notes.find((x) => x.clerk_doc === ids["pay-slip"]);
+      await NB.query({ table: "notes", operation: "update", values: { content: `${psNote.content}\nAsk payroll about the bonus.\n` }, filters: [["eq", "id", psNote.id]], expected: { [psNote.id]: psNote._hash } });
+      for (const slug of ["tax-assessment", "pay-slip"]) await api(alexTok, "PATCH", `documents/${ids[slug]}/`, { tags: [...(await doc(slug)).tags, keep] });
+      await runUntilQuiet(state, env);
+      const after = await NB.notes();
+      const t = after.find((x) => x.id === taNote.id), p2 = after.find((x) => x.id === psNote.id);
+      check(t?.is_trashed === true && !t.content.includes("103/5550/7781") && !JSON.stringify(t).includes(taNote.title) && t.clerk_summary === null,
+        "F11: adding the tag to a noted document trashes its note, with the Clerk's text taken out");
+      check(p2?.is_trashed === false && p2.content.trim() === "Ask payroll about the bonus." && p2.title === "Document kept out of the notebook",
+        "F11: adding it to a noted document with a line the person added leaves a note holding only that line");
+      const ki = (await NB.items()).find((i) => i.source_id === sumOf("tax-assessment"));
+      check(!!ki && JSON.stringify(Object.keys(ki.data).sort()) === JSON.stringify(["added", "folder", "status"]) && ki.data.status === "kept out of the notebook", "F17: its item shrinks to the kept-out form, without a title");
+      check(TG.sent.length === 3, "nothing in this to act on: no message");
+    }
 
     section("F18: the records deleted");
     const w2 = fake.writes.length, s2 = await snapshot();
+    const inNotebook = async () => (NB ? JSON.stringify([...(await NB.notes()), ...(await NB.items())].map((x) => `${x.id} ${x._hash}`).sort()) : "");
+    const nb2 = await inNotebook();
     fs.rmSync(path.join(state, "records"), { recursive: true, force: true });
     await runUntilQuiet(state, env);
     check(fake.writes.length === w2, "no second file, no move, no rename");
     check(await snapshot() === s2, "nothing changed in Paperless");
+    if (NB) check(await inNotebook() === nb2, "F10, F17: no second note or item, and not one rewritten");
 
     section("F14: private by default");
     const sentences = DOCS.flatMap((d) => kitText(d.slug).split(/[.\n]/).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 4));
@@ -325,10 +472,12 @@ async function main() {
     const strays = fs.readdirSync(state).filter((n) => !known.includes(n));
     check(strays.length === 0, `no temporary file: the state folder holds only the Clerk's own files${strays.length ? ` (${strays.join(", ")})` : ""}`);
     files.push(...["clerk.log", "state.json", "outbox.jsonl", "links.json"].map((n) => path.join(state, n)).filter(fs.existsSync));
-    const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)); });
-    check(leaks.length === 0, `no log line, record or temporary file holds a sentence or a title${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
+    const noteBits = NB ? (await NB.notes()).flatMap((n) => [n.clerk_summary, ...(n.clerk_facts || [])]).filter(Boolean) : [];
+    const leaks = files.filter((f) => { const b = fs.readFileSync(f, "utf8"); return sentences.some((s) => b.includes(s)) || titles.some((t) => b.includes(t)) || noteBits.some((x) => b.includes(x)); });
+    check(leaks.length === 0, `no log line, record or temporary file holds a sentence, a title or a note's summary${leaks.length ? `: ${leaks.join(", ")}` : ""}`);
     check(files.every((f) => (fs.statSync(f).mode & 0o777) === 0o600), "every file the Clerk keeps is readable by its owner only");
-  } finally { await fake.close(); }
+    if (NB) check(TG.sent.every((m) => linksIn(m).length === 1), "F16: every message carried exactly one link");
+  } finally { await fake.close(); await NB?.stop(); await TG?.close(); }
 
   console.log(`\n${passes} passed, ${failures} failed`);
   process.exit(failures ? 1 : 0);
