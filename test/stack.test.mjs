@@ -37,7 +37,7 @@ test("compose: the pinned image, memory limits, one worker, the port only on thi
   assert.match(y, /- \.\/data\/pg:\/var\/lib\/postgresql/);
   assert.ok(!/\t/.test(y), "no tabs in YAML");
   assert.ok(!/SECRET_KEY=|DBPASS=|POSTGRES_PASSWORD:/.test(y), "no secret in the compose file");
-  assert.ok(!/[–—]/.test(y));
+  assert.ok(!/[\u2013\u2014]/.test(y));
 });
 
 test("compose: a name or a time zone that could break the file is refused", () => {
@@ -78,6 +78,6 @@ test("starter set in the person's language: nine types, the inbox tag, the Clerk
   assert.equal(starterFor("Klingon").language, "English", "unknown: English");
   for (const [lang, s] of Object.entries(STARTERS)) {
     assert.equal(new Set(s.types).size, 9, lang);
-    assert.ok(!/[–—]/.test(JSON.stringify(s)), lang);
+    assert.ok(!/[\u2013\u2014]/.test(JSON.stringify(s)), lang);
   }
 });

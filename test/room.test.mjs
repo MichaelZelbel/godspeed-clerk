@@ -40,7 +40,7 @@ test("not Linux, not root, another processor: said, nothing else asked of the ma
 
 test("no em or en dashes in anything it says", () => {
   const all = [roomCheck({ platform: "darwin", root: false, arch: "ia32", mem_available_mb: 1, disk_free_gb: 0.1, docker: null, compose: null, docker_running: false }).missing.join(" ")];
-  assert.ok(!/[–—]/.test(all.join(" ")));
+  assert.ok(!/[\u2013\u2014]/.test(all.join(" ")));
 });
 
 test("memory free is the smaller of the machine's and its container's limit", () => {

@@ -18,7 +18,7 @@ const b64url = (b) => Buffer.from(b).toString("base64").replace(/\+/g, "-").repl
 
 export const TEST_CLIENT = { id: "test-client.apps.googleusercontent.com", secret: "test-secret" };
 
-export async function startFakeDrive({ tree = {}, account = "alex@example.test", pageSize = 100, grantScope = null, maxOr = Infinity } = {}) {
+export async function startFakeDrive({ tree = {}, account = "alex@example.test", pageSize = 100, grantScope = null, maxOr = Infinity, host = "127.0.0.1", publicHost = null, port = 0 } = {}) {
   const st = { files: new Map(), writes: [], codes: new Map(), refresh: new Map(), access: new Map(), sessions: new Map(), seq: 1, revoked: false, grantScope, calls: [], changes: [] };
   // Drive's changes feed: every change to a file, in order; a page token is a position in it.
   const logChange = (id) => { const x = st.files.get(id); st.changes.push({ fileId: id, removed: false, file: x ? { id: x.id, name: x.name, mimeType: x.mimeType, parents: [...x.parents], trashed: x.trashed } : null }); };
@@ -35,9 +35,9 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
     logChange(id);
     return id;
   }
-  function addFolder(name, parent) {
+  function addFolder(name, parent, appProperties = {}) {
     const id = newId("d");
-    st.files.set(id, { id, name, mimeType: FOLDER, parents: [parent], trashed: false, appProperties: {}, modifiedTime: now() });
+    st.files.set(id, { id, name, mimeType: FOLDER, parents: [parent], trashed: false, appProperties: { ...appProperties }, modifiedTime: now() });
     logChange(id);
     return id;
   }
@@ -116,7 +116,8 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
       logChange(f.id);
       return send(res, 200, shape(f, sess.fields));
     }
-    const id = addFile(sess.meta.name, (sess.meta.parents || [ROOT])[0], buf, { appProperties: sess.meta.appProperties || {}, mimeType: sess.meta.mimeType });
+    const parent = (sess.meta.parents || [ROOT])[0];
+    const id = addFile(sess.meta.name, parent === "root" ? ROOT : parent, buf, { appProperties: sess.meta.appProperties || {}, mimeType: sess.meta.mimeType });
     st.writes.push({ op: "upload", id, name: sess.meta.name, parents: [...st.files.get(id).parents] });
     return send(res, 200, shape(st.files.get(id), sess.fields));
   }
@@ -198,7 +199,7 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
         if (p === "/drive/v3/files" && req.method === "POST") {
           const meta = JSON.parse(raw.toString() || "{}");
           if (meta.mimeType !== FOLDER) return err(res, 400, "badRequest", "this fake makes folders here; files come by upload");
-          const id = addFolder(meta.name, (meta.parents || [ROOT])[0]);
+          const id = addFolder(meta.name, ((meta.parents || [ROOT])[0] === "root" ? ROOT : (meta.parents || [ROOT])[0]), meta.appProperties || {});
           st.writes.push({ op: "create-folder", id, name: meta.name, parents: [...st.files.get(id).parents] });
           logChange(id);
           return send(res, 200, shape(st.files.get(id), q.get("fields")));
@@ -207,6 +208,11 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
         if (m) {
           const f = st.files.get(m[1]);
           if (!f) return err(res, 404, "notFound", `File not found: ${m[1]}.`);
+          if (req.method === "GET" && q.get("alt") === "media") {
+            if (f.mimeType === FOLDER) return err(res, 403, "fileNotDownloadable");
+            res.writeHead(200, { "Content-Type": f.mimeType || "application/octet-stream" });
+            return res.end(f.content);
+          }
           if (req.method === "GET") return send(res, 200, shape(f, q.get("fields")));
           if (req.method === "PATCH") {
             const meta = JSON.parse(raw.toString() || "{}");
@@ -234,8 +240,8 @@ export async function startFakeDrive({ tree = {}, account = "alex@example.test",
       }
     });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const url = `http://127.0.0.1:${server.address().port}`;
+  await new Promise((r) => server.listen(port, host, r));
+  const url = `http://${publicHost || host}:${server.address().port}`;
   return {
     url, authUrl: `${url}/o/oauth2/v2/auth`, tokenUrl: `${url}/token`, ROOT, state: st,
     env: { GODSPEED_CLERK_GOOGLE_AUTH_URL: `${url}/o/oauth2/v2/auth`, GODSPEED_CLERK_GOOGLE_TOKEN_URL: `${url}/token`, GODSPEED_CLERK_DRIVE_API: url },
