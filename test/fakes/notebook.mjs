@@ -153,6 +153,8 @@ export async function startFakeNotebook({ web = "https://notebook.example" } = {
     personRenames: (key, title, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).title = title; },
     personDrops: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "dropped"; d.closed_on = "2026-10-23"; },
     personCloses: (key, addon = "godspeed-clerk") => { const d = due.get(`${addon} ${key}`); d.state = "closed"; d.closed_on = "2026-10-23"; },
+    // Any state Godspeed's list can say: "open", "unopened", "closed", "dropped", "needs-a-look".
+    setState: (key, state, addon = "godspeed-clerk") => { due.get(`${addon} ${key}`).state = state; },
     rows: (t) => visible(t).map((r) => structuredClone(r)),
     row: (t, id) => { const r = tables[t].get(id); return r && !r.removed_at ? structuredClone(r) : null; },
     // What the person does in the notebook's own screens: a save with the version they had.

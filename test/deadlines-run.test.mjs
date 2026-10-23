@@ -599,6 +599,29 @@ test("F15: a deadline the person dropped leaves the note's Deadlines and the ite
   } finally { await w.close(); }
 });
 
+test("F15: a dropped deadline whose file Godspeed cannot read for a while stays out of the note; one taken back comes back", async () => {
+  const w = await kitWorld({ only: ["tax-office-letter"] });
+  const part = () => w.noteOf("tax-office-letter").content.split("## Deadlines")[1]?.split("\n## ")[0] ?? "";
+  try {
+    await w.runUntilQuiet();
+    const key = keyOf(w.record("tax-office-letter").sum, 1);
+    w.nb.personDrops(key);
+    await w.runUntilQuiet();
+    const revision = w.noteOf("tax-office-letter").revision;
+    w.nb.setState(key, "needs-a-look");
+    await w.runUntilQuiet();
+    assert.equal(w.noteOf("tax-office-letter").revision, revision, "the note is not written while Godspeed cannot say");
+    w.nb.setState(key, "dropped");
+    await w.runUntilQuiet();
+    assert.equal(w.noteOf("tax-office-letter").revision, revision);
+    assert.ok(!part().includes("2026-11-13"), part());
+    w.nb.setState(key, "open");
+    await w.runUntilQuiet();
+    assert.ok(part().includes("2026-11-13"), "taken back from dropped: listed again");
+    assert.equal(w.messages.length, 0);
+  } finally { await w.close(); }
+});
+
 test("F16: a deadline whose date needs a check is one plain sentence with its date and the paper's title, linking to the paper in Paperless", async () => {
   const w = await kitWorld({ only: ["parking-notice"] });
   try {
