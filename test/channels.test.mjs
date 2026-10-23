@@ -96,3 +96,15 @@ test("telegram: a message longer than Telegram allows keeps its last line, the l
     assert.match(sent, /\nhttps:\/\/notebook\.example\/collections\/documents$/);
   } finally { await tg.close(); }
 });
+
+test("telegram: no answer in time is not asked again, so a message that did arrive is never sent twice", async () => {
+  const calls = [];
+  const server = http.createServer((req) => { calls.push(req.url); /* never answers */ });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  try {
+    const { ws } = godspeedWithBot();
+    const { send } = await import("../lib/channels/telegram.mjs");
+    await assert.rejects(send({ text: "x", settings: { workspace: ws }, env: { GODSPEED_CLERK_TELEGRAM_API: `http://127.0.0.1:${server.address().port}`, GODSPEED_CLERK_TEST: "1" }, home: tmp(), timeoutMs: 300 }));
+    assert.equal(calls.length, 1);
+  } finally { server.closeAllConnections?.(); await new Promise((r) => server.close(r)); }
+});
