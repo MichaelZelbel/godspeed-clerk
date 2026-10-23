@@ -273,3 +273,64 @@ test("F6: a document someone sorted while the AI thought is not written at all",
     assert.deepEqual(env.fake.writes, []);
   } finally { await env.fake.close(); }
 });
+
+// F7, judged field by field: a sender the AI is sure of that has a folder of its own (or a Paperless
+// sender of the same name) is used even when the AI is unsure about the type or the tags.
+const railFolders = { list: ["Fairway Rail", "Letters"], map: new Map(), nameOf: (p) => p, same: (n) => (findSame([{ name: "Fairway Rail" }], n) ? { path: "Fairway Rail", pattern: "{sender}" } : null) };
+async function sortWith(env, senders, ...answers) {
+  const a = asker(...answers);
+  const out = await sortDocument({ doc: env.doc, tax: env.tax, writer: env.pl.writer("godspeed"), settings, ask: a.ask, today: TODAY, folderChoices: ["{sender}"], senders });
+  return { out, calls: a.calls, doc: env.fake.doc(10) };
+}
+
+test("F7 field by field: unsure of type and tags, but the sender has a folder of the same name: that sender, sorted, the unsure fields left", async () => {
+  const env = await setup();
+  try {
+    const r = await sortWith(env, railFolders, answer({ correspondent: "Fairway Rail", document_type: "Invoice", tags: ["Home"], confident: false, unsure: ["document_type", "tags"] }));
+    assert.equal(r.out.result, "sorted");
+    assert.equal(env.fake.state.correspondents.get(r.doc.correspondent)?.name, "Fairway Rail", "a new sender, named like the person's folder");
+    assert.equal(r.doc.document_type, null, "the type it was unsure of is left for the person");
+    assert.deepEqual(tagNames(env, r.doc.tags), [], "no tag it was unsure of, and no Check this");
+    assert.equal(r.out.sender_folder, "Fairway Rail");
+    assert.equal(r.doc.title, "Electricity invoice March 2025");
+  } finally { await env.fake.close(); }
+});
+
+test("F7 field by field: a Paperless sender of the same name is enough", async () => {
+  const env = await setup();
+  try {
+    const r = await sortWith(env, null, answer({ correspondent: "Northgate Insurance Ltd", tags: ["Car"], confident: false, unsure: ["tags"] }));
+    assert.equal(r.out.result, "sorted");
+    assert.equal(r.doc.correspondent, 2);
+    assert.equal(r.doc.document_type, 1, "a type it was sure of is set");
+    assert.deepEqual(tagNames(env, r.doc.tags), []);
+    assert.equal(env.fake.writes.filter((w) => w.path === "/api/correspondents/").length, 0);
+  } finally { await env.fake.close(); }
+});
+
+test("F7: unsure of the sender itself, a sender without a folder or a Paperless sender, or an answer that names nothing it is unsure of: Check this as before", async () => {
+  for (const [why, a] of [
+    ["unsure of the sender", answer({ correspondent: "Fairway Rail", confident: false, unsure: ["correspondent", "document_type"] })],
+    ["no folder, no Paperless sender", answer({ correspondent: "Hollis Roofing", confident: false, unsure: ["document_type"] })],
+    ["not confident, nothing named", answer({ correspondent: "Fairway Rail", confident: false, unsure: [] })],
+    ["not confident, no list (an older answer)", answer({ correspondent: "Fairway Rail", confident: false })],
+  ]) {
+    const env = await setup();
+    try {
+      const r = await sortWith(env, railFolders, a);
+      assert.equal(r.out.result, "check", why);
+      assert.equal(r.doc.correspondent, null, why);
+      assert.ok(tagNames(env, r.doc.tags).includes("Check this"), why);
+      assert.equal(env.fake.writes.filter((w) => w.path === "/api/correspondents/").length, 0, why);
+    } finally { await env.fake.close(); }
+  }
+});
+
+test("the prompt asks which fields the AI is unsure of", async () => {
+  const env = await setup();
+  try {
+    const { system } = buildPrompt({ doc: env.doc, tax: env.tax, settings, today: TODAY, folderChoices: [] });
+    assert.match(system, /"unsure":/);
+    assert.equal(validateAnswer(answer({ confident: false, unsure: ["document_type", "nonsense", 3] }), TODAY).answer.unsure.join(), "document_type");
+  } finally { await env.fake.close(); }
+});
