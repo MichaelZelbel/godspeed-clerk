@@ -244,3 +244,69 @@ for (const sorting of ["paperless", "nobody"]) {
     } finally { await w.close(); }
   });
 }
+
+test("a line the person writes above the Clerk's part is never lost: the note is left as it is", async () => {
+  const w = await kitWorld({ only: ["utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    const n = w.noteOf("utility-invoice");
+    const mine = `Gardener keeps the side gate key until July.\n\n${n.content}`;
+    w.nb.edit("notes", n.id, { content: mine });
+    change(w, "utility-invoice", { title: "Electricity bill for February" });
+    await w.runUntilQuiet();
+    assert.equal(w.nb.row("notes", n.id).content, mine);
+    assert.match(fs.readFileSync(w.paths.log, "utf8"), /cannot be told apart/);
+  } finally { await w.close(); }
+});
+
+test("F11 with a line above the Clerk's part: nothing of the person's goes to the trash, the Clerk's own fields come out, and the person hears it once", async () => {
+  const w = await kitWorld({ only: ["council-letter"] });
+  try {
+    await w.runUntilQuiet();
+    const n = w.noteOf("council-letter");
+    const mine = `Ask the neighbours about the brown bin.\n\n${n.content}`;
+    w.nb.edit("notes", n.id, { content: mine });
+    change(w, "council-letter", { tags: [...w.doc("council-letter").tags, tagId(w, KEEP_OUT)] });
+    await w.runUntilQuiet();
+    const after = w.nb.row("notes", n.id);
+    assert.equal(after.is_trashed, false);
+    assert.equal(after.content, mine, "the text is the person's to clean");
+    assert.equal(after.title, "Document kept out of the notebook");
+    assert.equal(after.clerk_summary, null);
+    assert.equal(after.clerk_facts, null);
+    assert.equal(w.messages.length, 1);
+    assert.match(w.messages[0], /please remove it by hand/);
+    await w.run();
+    assert.equal(w.messages.length, 1);
+  } finally { await w.close(); }
+});
+
+test("a heading \"Your notes\" the person puts at the top: the note is left as it is, the text never twice", async () => {
+  const w = await kitWorld({ only: ["utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    const n = w.noteOf("utility-invoice");
+    const mine = `## Your notes\n\nMy plan for this bill.\n\n${n.content}`;
+    w.nb.edit("notes", n.id, { content: mine });
+    change(w, "utility-invoice", { title: "Electricity bill for February" });
+    await w.runUntilQuiet();
+    assert.equal(w.nb.row("notes", n.id).content, mine);
+  } finally { await w.close(); }
+});
+
+test("the notebook's editor writing the Clerk's part back its own way is not a change by the person", async () => {
+  const w = await kitWorld({ only: ["utility-invoice"] });
+  try {
+    await w.runUntilQuiet();
+    const n = w.noteOf("utility-invoice");
+    // The editor's Markdown: other list markers, other emphasis, other line breaks; the same words.
+    const rewritten = n.content.replace(/^- /gm, "* ").replace(/^_(.*)_$/gm, "*$1*").replace(/\n\n/g, "\n\n\n");
+    w.nb.edit("notes", n.id, { content: `${rewritten}\nPaid on 25 March.\n` });
+    change(w, "utility-invoice", { title: "Electricity bill for February" });
+    await w.runUntilQuiet();
+    const after = w.nb.row("notes", n.id);
+    assert.equal(after.title, "Electricity bill for February");
+    assert.match(after.content, /^- \*\*Sender:\*\* Brightwater Utilities/);
+    assert.match(after.content, /\n## Your notes\n\n+Paid on 25 March\.\n$/);
+  } finally { await w.close(); }
+});
