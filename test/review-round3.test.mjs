@@ -110,3 +110,17 @@ test("REVIEW 3: after a rebuild the person hears that the old copy stays in the 
   assert.match(t, /stays in your drive/);
   assert.ok(!/[\u2013\u2014]/.test(t));
 });
+
+test("the second factor's first code is never made in the last seconds of its 30, so it cannot expire on the way", async () => {
+  let t = Date.parse("2026-10-24T04:58:59.500Z"); // half a second before the next 30 seconds begin
+  const waits = [], sent = [];
+  const fetchImpl = async (url, o) => {
+    if (/profile\/totp/.test(url)) { const b = JSON.parse(o.body); sent.push({ ...b, at: t }); return new Response(JSON.stringify({ success: true, recovery_codes: ["1"] }), { status: 200 }); }
+    return new Response(JSON.stringify({ is_mfa_enabled: false }), { status: 200 });
+  };
+  const host = new Host({ dir: os.tmpdir(), port: 8010 }, { fetchImpl, clock: () => t, wait: async (ms) => { waits.push(ms); t += ms; } });
+  const r = await host.secondFactor("tok");
+  assert.ok(waits[0] >= 500, `waited for the next 30 seconds (${waits})`);
+  const { totp } = await import("../lib/install/totp.mjs");
+  assert.equal(sent[0].code, totp(r.secret, { time: Date.parse("2026-10-24T04:59:00.000Z") + 1000 }), "the code of the new 30 seconds");
+});

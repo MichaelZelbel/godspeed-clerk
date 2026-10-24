@@ -152,7 +152,14 @@ function phone(m) {
   });
   return {
     req,
-    async signIn(user, password, secret) { const r = await req("POST", "/api/token/", { body: { username: user, password, ...(secret ? { code: totp(secret) } : {}) } }); return r; },
+    // As a person with an authenticator app: never a code about to expire, and once more with the
+    // next one when Paperless refused it (a code it saw already, or one that expired on the way).
+    async signIn(user, password, secret) {
+      const fresh = async () => { const left = 30000 - (Date.now() % 30000); if (left < 3000) await sleep(left + 200); return totp(secret); };
+      let r = await req("POST", "/api/token/", { body: { username: user, password, ...(secret ? { code: await fresh() } : {}) } });
+      if (secret && r.status === 400) { await sleep(30000 - (Date.now() % 30000) + 200); r = await req("POST", "/api/token/", { body: { username: user, password, code: totp(secret) } }); }
+      return r;
+    },
     // As Swift Paperless uploads: a multipart form, the scan named by its time, today's date.
     async upload(tok, file, name, created) {
       const b = `----clerk${crypto.randomBytes(6).toString("hex")}`;
