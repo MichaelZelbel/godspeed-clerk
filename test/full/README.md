@@ -49,8 +49,9 @@ GODSPEED_NOTEBOOK_CHECKOUT=../godspeed-mission-control node test/full/full.mjs
 docker compose -f test/full/compose.yaml down -v
 ```
 
-`GODSPEED_NOTEBOOK_CHECKOUT` is a checkout of https://github.com/MichaelZelbel/godspeed-mission-control;
-its notebook needs Node 22.13 or newer (it uses `node:sqlite`), named with `NOTEBOOK_NODE` when the
+`GODSPEED_NOTEBOOK_CHECKOUT` is a checkout of https://github.com/MichaelZelbel/godspeed-mission-control,
+beside this folder and never inside it (its CommonJS tools would take this folder's package.json,
+which says ES modules, for theirs, and the notebook would not start); its notebook needs Node 22.13 or newer (it uses `node:sqlite`), named with `NOTEBOOK_NODE` when the
 test runs on another. Without the checkout the notes, the collection and the messages are reported
 as not run, and the Clerk is given an address where nothing answers, so it can never reach a
 notebook that belongs to someone.

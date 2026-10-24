@@ -24,6 +24,10 @@ jobs:
         with:
           repository: MichaelZelbel/godspeed-mission-control
           path: product
+      # Beside the Clerk, not inside it: the product's CommonJS tools would otherwise take the
+      # Clerk's package.json ("type": "module") as theirs, and its notebook would not start.
+      - name: The product beside the Clerk
+        run: mv product "$RUNNER_TEMP/product"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -38,7 +42,7 @@ jobs:
         env:
           PAPERLESS_URL: http://127.0.0.1:8000
           KIT_RENDERED: test/kit/rendered
-          GODSPEED_NOTEBOOK_CHECKOUT: product
+          GODSPEED_NOTEBOOK_CHECKOUT: ${{ runner.temp }}/product
       - name: What Paperless said, when it failed
         if: failure()
         run: docker compose -f test/full/compose.yaml logs --tail 200 webserver
