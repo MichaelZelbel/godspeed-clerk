@@ -6,6 +6,8 @@
 
 # The Clerk
 
+**Beta 0.5.0. Requires Godspeed Mission Control 2.0.0-beta.6 or newer.**
+
 **You scan a letter with your phone. Minutes later it has a real name, it sits in the right folder
 of your own Google Drive, and your mission control can tell you what it says.**
 
@@ -65,7 +67,8 @@ and Chapter 2 of the book.
 
 ## Add it
 
-**On your Godspeed server** (Linux with Docker; this installs Paperless too):
+**On your Godspeed server, as root** (Linux, with either the website's Docker installation or the
+native installation; this installs Paperless too):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/install.sh | bash
@@ -89,7 +92,10 @@ It follows [the steps for assistants](INSTALL-FOR-ASSISTANTS.md).
 Run the same line again to update; your settings, your connections and everything the Clerk keeps
 stay as they are.
 
-**What the server needs** (the installer checks it first and installs nothing when it is short):
+Finish Godspeed's own first setup and connect your AI there before adding the Clerk. An older
+Godspeed gets one update instruction before the Clerk changes Paperless or its service.
+
+**What the server needs** (Paperless is installed only when these checks pass):
 1.5 GB of memory free, 8 GB of disk free, Docker with Compose, and the web address Godspeed's own
 installer gave it. Your papers then take their space twice on the server: once in Paperless, once
 in its nightly export for the restore copy.
@@ -276,6 +282,9 @@ sets them once in your language; `godspeed-clerk settings reset texts` brings ba
 
 ## Honest limits
 
+- Installing Paperless is supported on a Linux Godspeed server, using the public Docker or native
+  installer, with Godspeed Mission Control 2.0.0-beta.6 or newer. Run the Clerk line on the server's
+  host, where you ran Godspeed's install line.
 - The phone app named here is for the iPhone. On Android, the Clerk names no app yet.
 - The address uses your server's own name and a port of its own (48444). If your hosting provider
   runs a firewall in front of the server, that port has to be let in.
@@ -293,6 +302,12 @@ of made-up documents. The full test runs a real Paperless-ngx in Docker
 ([test/full/README.md](test/full/README.md)); the machine test installs the Clerk with its install
 line on fresh Linux servers, rebuilds one from the drive and breaks an update on purpose
 ([test/machine/README.md](test/machine/README.md)).
+
+The [public-server install review](test/public/README.md) uses the actual website's Docker and
+native installers, released Godspeed notebook and model command, and a phone-style letter upload
+through real Paperless OCR into a pretend Drive. Both fresh beta.6 paths passed for 0.5.0;
+[the release evidence](docs/releases/2026-10-24-clerk-0.5-verification.md) records the checks and
+the native 0.4-to-0.5 HTTPS migration.
 
 ## License
 

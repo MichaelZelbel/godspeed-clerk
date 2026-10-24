@@ -1,0 +1,21 @@
+{
+  "machine": "clerk-b6-native-baseline",
+  "godspeed": "2.0.0-beta.6",
+  "clerk_before": "0.4.0",
+  "clerk_after": "0.5.0",
+  "https_status": 401,
+  "certificate": "sha256 Fingerprint=DC:DF:B9:BF:A4:21:73:FA:3B:29:22:54:E2:EB:A3:84:D3:F8:E4:B9:7C:62:9C:68:63:CF:87:4A:29:E6:EE:22",
+  "checks": [
+    "actual native baseline still runs Clerk0.4",
+    "actual old individual Clerk import exists before migration",
+    "old individual import removed and supported wildcard kept",
+    "site moved to the native add-on folder; old site removed",
+    "actual native Caddy validates the migrated configuration",
+    "migrated Paperless answers through CA-trusted HTTPS",
+    "the migration keeps the same certificate",
+    "workspace, pause state and approved AI preserved",
+    "existing Paperless connection and token preserved",
+    "the Clerk update does not recreate or restart Paperless",
+    "normal README update installed Clerk0.5"
+  ]
+}

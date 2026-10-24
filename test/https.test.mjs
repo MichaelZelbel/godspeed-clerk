@@ -116,3 +116,35 @@ test("the port: 48444 unless something already uses it", () => {
   assert.equal(freePort({ texts: ["x.example:48444 {\n}"], run: () => ({ status: 0, stdout: "" }) }), 48445);
   assert.equal(freePort({ texts: [], run: () => ({ status: 0, stdout: "LISTEN 0 4096 0.0.0.0:48444 0.0.0.0:*\n" }) }), 48445);
 });
+
+test("native beta.6 add-on folder: migrates the Clerk's earlier site and import after Caddy accepts it", async () => {
+  const m = machine();
+  const first = findFront({ root: m.root, run: m.run });
+  await publish({ front: first, host: "srv1.example.test", port: 48444, upstream: 8010, root: m.root, run: m.run });
+  const cf = m.f(first.caddyfile), legacy = `${m.ws}/https/${SITE_FILE_NAME}`;
+  fs.appendFileSync(cf, "\nimport /etc/caddy/godspeed-addons/*.caddy\n");
+  const front = findFront({ root: m.root, run: m.run });
+  assert.equal(front.addonDir, "/etc/caddy/godspeed-addons");
+  const r = await publish({ front, host: "srv1.example.test", port: 48444, upstream: 8010, root: m.root, run: m.run });
+  assert.equal(r.ok, true);
+  assert.ok(fs.existsSync(m.f(`etc/caddy/godspeed-addons/${SITE_FILE_NAME}`)));
+  assert.equal(fs.existsSync(m.f(legacy)), false);
+  assert.ok(!fs.readFileSync(cf, "utf8").includes(`import ${legacy}`));
+  assert.match(fs.readFileSync(cf, "utf8"), /import \/etc\/caddy\/godspeed-addons\/\*\.caddy/);
+  assert.equal((await heal({ host: "srv1.example.test", port: 48444, upstream: 8010, root: m.root, run: m.run })).healed, false);
+});
+
+test("native add-on migration refused by Caddy keeps its previous address and site", async () => {
+  const m = machine();
+  const first = findFront({ root: m.root, run: m.run });
+  await publish({ front: first, host: "srv1.example.test", port: 48444, upstream: 8010, root: m.root, run: m.run });
+  const cf = m.f(first.caddyfile), legacy = `${m.ws}/https/${SITE_FILE_NAME}`;
+  fs.appendFileSync(cf, "\nimport /etc/caddy/godspeed-addons/*.caddy\n");
+  const before = fs.readFileSync(cf, "utf8"), oldSite = fs.readFileSync(m.f(legacy), "utf8");
+  const run = (cmd, args) => cmd === "systemctl" && args[0] === "restart" ? { status: 1, stdout: "" } : m.run(cmd, args);
+  const r = await publish({ front: findFront({ root: m.root, run }), host: "srv1.example.test", port: 48444, upstream: 8010, root: m.root, run });
+  assert.equal(r.ok, false);
+  assert.equal(fs.readFileSync(cf, "utf8"), before);
+  assert.equal(fs.readFileSync(m.f(legacy), "utf8"), oldSite);
+  assert.equal(fs.existsSync(m.f(`etc/caddy/godspeed-addons/${SITE_FILE_NAME}`)), false);
+});

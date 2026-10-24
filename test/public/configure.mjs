@@ -1,0 +1,32 @@
+import fs from "node:fs";
+import path from "node:path";
+import {spawnSync} from "node:child_process";
+const workspace=process.argv[2],port=Number(process.argv[3]),publicPort=Number(process.argv[4]);
+if(!path.isAbsolute(workspace)||![47831,47832].includes(port))throw Error("Choose this test machine's installed workspace and private port");
+const base="http://127.0.0.1:"+port;
+const request=async(route,body,otherBase=base)=>{const r=await fetch(otherBase+route,{method:body===undefined?"GET":"POST",headers:{"content-type":"application/json"},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)});const j=await r.json();if(!r.ok||j.error)throw Error("Test setup route "+route+" returned "+r.status+" "+JSON.stringify(j));return j;};
+const health=await request("/health");if(health.version!=="2.0.0-beta.6")throw Error("Public install isn't beta.6: "+health.version);
+const descriptor=JSON.parse(fs.readFileSync(path.join(workspace,".godspeed/assistant.json")));
+if(!descriptor.verified)throw Error("Godspeed's own assistant isn't verified");
+const env={...process.env,HERMES_HOME:descriptor.home,GODSPEED_WORKSPACE:workspace};
+for(const [key,value] of [["model.provider","custom"],["model.default","clerk-test"],["model.base_url","http://10.89.0.1:48904/v1"]]){
+ const r=spawnSync(descriptor.executable,["config","set",key,value],{cwd:workspace,env,encoding:"utf8",timeout:90000,maxBuffer:1024*1024});
+ if(r.status!==0)throw Error("Hermes normal test setup failed at "+key+" "+r.stderr);
+}
+fs.appendFileSync(path.join(descriptor.home,".env"),"\nOPENAI_API_KEY=made-up-test-key\nOPENAI_BASE_URL=http://10.89.0.1:48904/v1\nTELEGRAM_BOT_TOKEN=999:made-up-for-the-machine-test\nTELEGRAM_HOME_CHANNEL=1001\n",{mode:0o600});
+const modelArgs=[path.join(workspace,".godspeed/model.mjs"),"--workspace",workspace];
+const check=spawnSync(process.execPath,[...modelArgs,"--check"],{cwd:workspace,env,encoding:"utf8",timeout:90000,maxBuffer:1024*1024});
+if(check.status!==0)throw Error("Released Godspeed model describe failed: "+check.stderr);
+const described=JSON.parse(check.stdout);if(!described.configured||described.provider!=="custom")throw Error("Test provider was not selected");
+const reply=spawnSync(process.execPath,modelArgs,{cwd:workspace,env,encoding:"utf8",timeout:90000,maxBuffer:1024*1024,input:JSON.stringify({system:"Return a short invented test answer.",prompt:"This is made-up test data.",timeout_ms:30000,max_tokens:256})});
+if(reply.status!==0||!JSON.parse(reply.stdout).text)throw Error("Released Godspeed actual model request failed: "+reply.stderr);
+if(process.env.SETUP_INVITE)await request("/api/auth/setup",{invite:process.env.SETUP_INVITE,username:"alex",password:"clerk-test-owner-password"}, "http://127.0.0.1:"+publicPort);
+let p=(await request("/api/query",{table:"profiles",operation:"select"})).data[0];
+if(p)await request("/api/query",{table:"profiles",operation:"update",values:{timezone:"Europe/Berlin"},filters:[["eq","id",p.id]],expected:{[p.id]:p._hash}});
+else await request("/api/query",{table:"profiles",operation:"insert",values:{id:"owner",display_name:"Alex",timezone:"Europe/Berlin"}});
+p=(await request("/api/query",{table:"profiles",operation:"select"})).data[0];
+if(p.timezone!=="Europe/Berlin")throw Error("The real notebook didn't save the test timezone");
+const locked=await fetch("http://127.0.0.1:"+publicPort+"/api/query",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({table:"collections",operation:"select"}),signal:AbortSignal.timeout(10000)});
+if(locked.status!==401)throw Error("The public notebook door wasn't protected");
+await request("/api/functions/addon-deadlines",{addon:"godspeed-clerk",action:"list"});
+console.log(JSON.stringify({version:health.version,provider:described.provider,model:described.model,timezone:p.timezone,public_unauthenticated_query:locked.status,actual_model_request:true,owner_created:!!process.env.SETUP_INVITE}));

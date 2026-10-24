@@ -13,7 +13,7 @@ import { recoverUpdate } from "../lib/install/keep.mjs";
 import { Host } from "../lib/install/host.mjs";
 import { freshStartWarning } from "../lib/commands/plan.mjs";
 import crypto from "node:crypto";
-import { cli } from "./helpers.mjs";
+import { cli, installedVersion } from "./helpers.mjs";
 import { copyStep } from "../lib/core/restore.mjs";
 
 test("REVIEW C: status of an installed Paperless says it runs, never that it is being installed", async () => {
@@ -110,6 +110,7 @@ test("REVIEW: run again during a rebuild that was cut off, the install line poin
     writeJson(w.paths.installed, { dir: os.tmpdir(), project: "x", port: 8010, version: "3.2.1", stage: "done", user: "alex", host: "srv1.example.test", https_port: 48444, address: "https://srv1.example.test:48444", rebuild: { made_at: "2026-10-23T22:28:50.000Z", stage: "wiped", copy_id: "a1" } });
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-ws-"));
     fs.writeFileSync(path.join(ws, "AGENTS.md"), "x");
+    installedVersion(ws);
     const r = await cli(["setup", "--godspeed", ws, "--no-service", "--no-copy", "--state", st], { env: w.env });
     assert.equal(r.code, 0, r.err);
     assert.match(r.out, /godspeed-clerk restore/);

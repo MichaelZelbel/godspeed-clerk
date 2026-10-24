@@ -12,8 +12,11 @@ run the commands and say what each one found; they decide.
 
 ## 1. Check that it fits
 
-- Godspeed Mission Control has to be installed: a mission control folder that holds `AGENTS.md`.
-  Note its path. If there is none, tell them in one sentence that the Clerk is an add-on for
+- Godspeed Mission Control **2.0.0-beta.6 or newer** has to be installed, with its AI connected.
+  A native workspace holds `AGENTS.md` and its model launcher. The public Docker server's host
+  folder is normally `/opt/godspeed-mission-control`, with `.godspeed/model-host.json` and
+  `.godspeed/model.mjs`; it does not need a host `AGENTS.md`. Note that path. If there is none,
+  tell them in one sentence that the Clerk is an add-on for
   Godspeed Mission Control and point them to https://godspeedmissioncontrol.com/install.
 - Where does their Godspeed run? On a **Linux server** (the usual case) the Clerk runs there and can
   install Paperless itself. On **Windows, macOS or a Linux desktop** it needs a Paperless that already
@@ -23,6 +26,10 @@ run the commands and say what each one found; they decide.
 ## 2. Run the installer
 
 On a server, as root (or with sudo):
+
+Run this on the host for both Docker and native Godspeed installations. The Clerk finds the
+installed Godspeed runtime, private notebook door, assistant Telegram settings and time zone;
+do not add another notebook, AI connection or public API port.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/install.sh | bash -s -- --user <the name they want to sign in with>
@@ -50,6 +57,8 @@ command as `PAPERLESS_PASSWORD`; never store it.
 
 Read what it prints:
 
+- **"Update Godspeed Mission Control to 2.0.0-beta.6 or newer"** means update Godspeed first,
+  then run the same Clerk line again. Paperless and the Clerk service have not been changed.
 - **"Paperless was not installed, because:"** lists what the server lacks (memory, disk, Docker, the
   web address). Tell them each in one sentence and what fixes it. Installing Docker or a bigger
   server is their call: ask first.

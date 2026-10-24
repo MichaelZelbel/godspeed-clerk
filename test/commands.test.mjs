@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { cli } from "./helpers.mjs";
+import { cli, installedVersion } from "./helpers.mjs";
 import { startFakePaperless } from "./fakes/paperless.mjs";
 import { startFakeDrive, TEST_CLIENT } from "./fakes/drive.mjs";
 import { kitWorld, KIT } from "./kit-world.mjs";
@@ -20,7 +20,7 @@ import { systemdUnit, launchAgentPlist, windowsTaskXml } from "../lib/setup/serv
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FAKE_MODEL = path.join(HERE, "fakes", "model.mjs");
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "clerk-cmd-"));
-const workspace = () => { const d = tmp(); fs.writeFileSync(path.join(d, "AGENTS.md"), "x"); return d; };
+const workspace = () => { const d = tmp(); fs.writeFileSync(path.join(d, "AGENTS.md"), "x"); return installedVersion(d); };
 
 function modelEnv(extra = {}) {
   const d = tmp();
@@ -57,7 +57,8 @@ test("running setup again reuses the token it has and signs in to nothing", asyn
     const dir = tmp();
     const args = ["setup", "--paperless", pl.url, "--user", "alex", "--godspeed", workspace(), "--no-service", "--no-copy", "--state", dir];
     assert.equal((await cli(args, { env: { ...modelEnv(), PAPERLESS_PASSWORD: "pw" } })).code, 0);
-    assert.equal((await cli(args, { env: { ...modelEnv(), PAPERLESS_PASSWORD: "" } })).code, 0);
+    const again = args.filter((v, i) => v !== "--godspeed" && args[i - 1] !== "--godspeed");
+    assert.equal((await cli(again, { env: { ...modelEnv(), PAPERLESS_PASSWORD: "" } })).code, 0);
     assert.deepEqual(pl.writes.map((w) => w.path), ["/api/token/"]);
   } finally { await pl.close(); }
 });

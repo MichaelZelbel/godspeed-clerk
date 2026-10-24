@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MichaelZelbel/godspeed-mission-control
+          ref: godspeed-v2-integrated-2026-10-24-2
           path: product
       # Beside the Clerk, not inside it: the product's CommonJS tools would otherwise take the
       # Clerk's package.json ("type": "module") as theirs, and its notebook would not start.

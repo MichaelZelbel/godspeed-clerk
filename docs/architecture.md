@@ -8,6 +8,7 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `paperless.mjs` | Paperless's REST API. Reading is free; writing exists only behind `writer("godspeed")`. |
 | `sorter.mjs` | One document: the request to the AI, the hard check of its answer, what may change. |
 | `model.mjs` | Godspeed's `godspeed-model`, and the check that the provider was approved. |
+| `docker.mjs` | The public Docker installation marker, its private notebook relay and verified assistant home. |
 | `drive.mjs` | Google Drive v3, and `Confined`, the only way to write to it. |
 | `oauth.mjs` | Google sign-in with PKCE, that also works on a server without a browser. |
 | `plan.mjs` | The folder plan: proposing it from your folders, the rules, file names. |
@@ -33,6 +34,7 @@ The Paperless the Clerk installs lives in `lib/install/`:
 | File | What it does |
 | --- | --- |
 | `room.mjs` | The size check before anything is installed: memory free (inside a container's limit too), disk, Docker, Compose, the processor, root. |
+| `godspeed.mjs` | The installed Godspeed version, required to be 2.0.0-beta.6 or newer before setup changes Paperless or services. |
 | `versions.mjs` | The Paperless versions the Clerk was tested with, pinned to their image digests. |
 | `stack.mjs` | compose.yaml and paperless.env: Paperless, Postgres and Valkey with memory limits, its port on 127.0.0.1 only, text reading in the person's language and English. |
 | `starter.mjs` | The starter document types and tags in six languages. |
@@ -187,6 +189,14 @@ and a paper to check.
 Every write carries the version just read (`expected`), so a note or item the person saves at
 that moment is refused by the notebook and kept; the Clerk tries again next run.
 
+Native installations use the notebook's private loopback door on port 47831. On the public Docker
+server, `docker.mjs` uses `docker compose exec -T --user hermes godspeed` to make only the record,
+deadline and notebook-link requests at `127.0.0.1:47832` inside the installed container. It exposes
+no port and stores no notebook login. The same adapter reads the profile time zone before
+Paperless is created. Telegram reads the verified assistant home's settings fresh, without
+copying its credentials into Clerk state. AI requests continue through the installed host
+`godspeed-model` launcher.
+
 ## Deadlines from letters
 
 The AI reads a letter's requests once: in the answer that sorts it, otherwise in the note's
@@ -295,15 +305,22 @@ once for every wait (keyed by the paper's sorting).
 the way it was set up by hand on 22 October 2026, and every step looks for its own result first, so
 running the line again after a stop carries on:
 
+Setup first requires Godspeed Mission Control 2.0.0-beta.6 or newer. The native runtime's installed
+version receipt or the actual local notebook reports it. The Docker installer also gives older
+servers the update sentence before the missing-host-Node check. Where Docker has Node only inside
+Godspeed, the installer copies that actual binary into the Clerk's private `runtime/node` folder.
+
 1. The size check (`room.mjs`): 1.5 GB of memory free, inside the container's limit when there is
    one, 8 GB of disk, Docker with Compose, a 64-bit processor, root. Short: it says what is missing
    and installs nothing.
-2. The address (`https.mjs`): the Caddy that holds ports 80 and 443 for Godspeed's notebook, either
-   Godspeed's own (`godspeed-https.service`, its Caddyfile in the Godspeed folder) or the server's
-   (`caddy.service`), and the server's name from its sites. The Clerk adds a site file of its own,
-   `<name>:48444` handed to Paperless on 127.0.0.1, and one `import` line, so Paperless shares the
-   name's certificate; a reload the server's Caddy refuses puts both files back. Godspeed's
-   installer writes its own Caddyfile whole, so the worker puts the line back within the hour.
+2. The address (`https.mjs`): `<name>:48444` handed to Paperless on 127.0.0.1. Native installs use
+   Godspeed's `/etc/caddy/godspeed-addons/*.caddy` import, writing only the Clerk's own site there;
+   an earlier individual Clerk import and site are removed after Caddy accepts the migration.
+   A refused reload restores the earlier files. The public Docker server's fixed Caddy command
+   has no add-on config mount, so a Clerk-owned Caddy container shares its actual `/data`
+   certificate volume, with redirects and the admin endpoint disabled. Godspeed's compose and
+   web configuration stay as they are. Caddy supports shared storage for certificate management:
+   <https://caddyserver.com/docs/automatic-https#storage>. The hourly check keeps the address.
 3. Paperless (`stack.mjs`, `versions.mjs`) in `/opt/godspeed-clerk/paperless`, pinned to the newest
    tested image digest, with memory limits (1600m, 384m, 128m) and one worker each; its data in
    folders beside the files; AI off in Paperless.

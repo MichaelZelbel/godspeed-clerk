@@ -1,5 +1,20 @@
 # Changes
 
+## 0.5.0 beta (Godspeed Mission Control 2.0.0-beta.6 or newer)
+
+- The same install line now supports the public Docker server and the native Linux server.
+  On Docker it finds the installed Godspeed workspace and keeps Godspeed's bundled Node in the
+  Clerk's own runtime folder when the host has none.
+- Docker notes, collections, deadlines and the person's time zone use Godspeed's private notebook
+  door through Docker exec. No private API port is exposed. The AI still uses only Godspeed's
+  existing model command, and Telegram reads the real connected assistant's own settings.
+- Docker Paperless gets its own HTTPS front sharing Godspeed's existing Caddy certificate storage.
+  On native servers the Clerk uses Godspeed's add-on Caddy folder and removes its earlier site
+  and individual import after Caddy accepts the migration.
+- Setup requires Godspeed Mission Control 2.0.0-beta.6 or newer before Paperless or service changes,
+  with one plain instruction to update older installations. Running the line again keeps the
+  existing connections and leaves a Paperless the Clerk did not install under its owner's care.
+
 ## 0.4.0 (batch 4: the installer, for everyone else)
 
 - The install line installs Paperless on a Godspeed server that has none (F1): a size check first
