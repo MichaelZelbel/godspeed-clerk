@@ -61,3 +61,12 @@
   another time zone than the server; the day either side now counts, and the installer takes the
   person's time zone from their notebook. And a Clerk that lost its records made a second To sort
   page after "Paperless sorts"; it finds its own again now.
+- The independent review, round 1 (verdict no, four findings blocking release): a new server's first
+  copy wrote over the old one's restore copy; an update cut off half way (or during its rollback)
+  left the Clerk wrong about the version and the copy unrestorable; a rebuild cut off half way could
+  not be finished; a changed file in the drive was imported silently; plus seven more (a stale login
+  after a rebuild, lost thumbnails, a forced copy finishing an old export, a copy failing in silence,
+  a dropped connection, a status claiming a rebuild, a shared Paperless never updated). All fixed
+  test-first: copy folders per installation, journals for updates and rebuilds, every file checked
+  against the export's manifest. The machine test then found that Paperless 3 keeps SHA-256
+  checksums where the tests had MD5 ones.
