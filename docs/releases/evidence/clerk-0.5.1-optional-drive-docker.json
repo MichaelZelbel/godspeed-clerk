@@ -1,0 +1,74 @@
+{
+  "machine": "clerk-b6-optional-drive-candidate",
+  "kind": "docker",
+  "optional_drive_first": true,
+  "late_drive_identity": {
+    "before": {
+      "notes": [
+        "clerk-c723e35d64504b624f2b5b6e3d71a90d"
+      ],
+      "items": [
+        "collection-items-5f00a512"
+      ],
+      "deadlines": [
+        {
+          "key": "c723e35d64504b624f2b5b6e3d71a90d#1",
+          "slug": "pay-the-brightwater-utilities-electricity-invoice"
+        }
+      ]
+    },
+    "after": {
+      "notes": [
+        "clerk-c723e35d64504b624f2b5b6e3d71a90d"
+      ],
+      "items": [
+        "collection-items-5f00a512"
+      ],
+      "deadlines": [
+        {
+          "key": "c723e35d64504b624f2b5b6e3d71a90d#1",
+          "slug": "pay-the-brightwater-utilities-electricity-invoice"
+        }
+      ]
+    }
+  },
+  "godspeed": "2.0.0-beta.6",
+  "runtime_source": "9390da492a0035a41b0eb02584234e269bca6dc8",
+  "clerk": "0.5.1",
+  "workspace": "/opt/data/full-candidate/workspace",
+  "https_host": "notebook-docker.localhost",
+  "https_port": 48444,
+  "certificate_fingerprint256": "25:C3:D4:24:22:BB:D8:4C:D9:2E:2F:93:E2:91:88:33:E3:02:D8:34:94:A4:DB:2B:D2:CD:DA:4C:EE:D9:75:AB",
+  "time_zone": "Europe/Berlin",
+  "document_id": 1,
+  "filed_path": "Paperwork/Invoices/Brightwater Utilities/2026-10-12 Electricity invoice September 2026.pdf",
+  "notebook_note_count": 1,
+  "notebook_collection_items": 1,
+  "notebook_deadline_count": 1,
+  "model_http_requests": 3,
+  "telegram_messages": 1,
+  "checks": [
+    "the installed runtime is the actual released beta.6 source",
+    "managed Paperless installed with the real notebook's timezone",
+    "Paperless answers through trusted HTTPS",
+    "the same fresh public Godspeed notebook remains healthy over HTTPS",
+    "Paperless and Godspeed present the same certificate",
+    "a password alone is refused",
+    "phone-style password and authenticator sign-in works",
+    "phone-style multipart letter upload accepted",
+    "real Paperless OCR finished",
+    "the invented invoice is named and dated in Paperless",
+    "no Drive copy or Google setup is needed before sorting and notes",
+    "the real installed notebook has the Clerk note and collection item without AI reprocessing",
+    "the real installed notebook has the letter's deadline",
+    "the released Godspeed model made real tools-free requests to the test-only HTTP provider",
+    "the actual assistant's discovered Telegram connection delivered the first-scan message to the pretend endpoint",
+    "without Drive the same Paperless letter has a sorted notebook record and Paperless links",
+    "basic status explains optional Drive and no off-server backup",
+    "normal Drive consent, documents folder, plan and resume complete",
+    "later Drive connection files the existing letter exactly once",
+    "later Drive keeps the same actual note, item and deadline identities",
+    "the same notebook records gain their Drive links",
+    "Clerk status is active after the complete journey"
+  ]
+}

@@ -316,6 +316,8 @@ native installers, released Godspeed notebook and model command, and a phone-sty
 through real Paperless OCR into a pretend Drive. Both fresh beta.6 paths passed for 0.5.0;
 [the release evidence](docs/releases/2026-10-24-clerk-0.5-verification.md) records the checks and
 the native 0.4-to-0.5 HTTPS migration.
+The [0.5.1 optional-Drive evidence](docs/releases/2026-10-24-clerk-0.5.1-verification.md)
+records the basic phone journey and later Drive connection with the same notebook records.
 
 ## License
 

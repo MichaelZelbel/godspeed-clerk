@@ -7,6 +7,10 @@ Paperless-ngx and files each one into the right folder of their own cloud drive.
   `docs/proposals/paperless-addon.md` (MichaelZelbel/godspeed-mission-control). Each feature there
   has an id (F1 to F18) and a test; those tests are the acceptance tests. Never weaken one to make
   it pass; say so in the pull request when one looks wrong.
+- The 0.5.1 requirement makes Google Drive optional, overriding the proposal's earlier Drive
+  prerequisite. Follow the current `README.md` and `docs/architecture.md`: Paperless-only use
+  still sorts, writes notebook records and creates deadlines. Drive-first F18 ordering remains
+  when Drive is configured; all other privacy, account ownership and safety acceptance stays.
 - How it is built: `docs/architecture.md`. The build plan of each batch: `docs/superpowers/plans/`.
 - Tests: `node --test "test/*.test.mjs"` (fast, no network, no Docker). The full test with a real
   Paperless in Docker: `test/full/README.md`, run by the `full` workflow. The machine test (the
