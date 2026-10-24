@@ -18,6 +18,8 @@ import { readJson, writeJson } from "../lib/core/files.mjs";
 import { startFakeDrive, TEST_CLIENT } from "./fakes/drive.mjs";
 
 const md5 = (b) => crypto.createHash("md5").update(b).digest("hex");
+// Paperless 3 keeps SHA-256 checksums in its manifest (64 characters), as the real export does.
+const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
 // A Paperless the Clerk installed, as the copy sees it: an export with a manifest that names each
 // file and its checksum, the way Paperless's exporter writes it.
@@ -38,7 +40,7 @@ function fakeHost({ owners = { alex: 2 }, docs = 2, version = "3.3.3", label = v
         const ob = Buffer.from(`%PDF-1.4 original ${i}`), ab = Buffer.from(`%PDF-1.4 archive ${i}`);
         if (!fs.existsSync(path.join(exp, o))) fs.writeFileSync(path.join(exp, o), ob);
         if (!fs.existsSync(path.join(exp, a))) fs.writeFileSync(path.join(exp, a), ab);
-        manifest.push({ model: "documents.document", pk: i, fields: { title: `Scan ${i}`, checksum: md5(fs.readFileSync(path.join(exp, o))), archive_checksum: md5(fs.readFileSync(path.join(exp, a))) }, __exported_file_name__: o, __exported_archive_name__: a });
+        manifest.push({ model: "documents.document", pk: i, fields: { title: `Scan ${i}`, checksum: sha256(fs.readFileSync(path.join(exp, o))), archive_checksum: sha256(fs.readFileSync(path.join(exp, a))) }, __exported_file_name__: o, __exported_archive_name__: a });
       }
       fs.writeFileSync(path.join(exp, "manifest.json"), JSON.stringify(manifest));
       fs.writeFileSync(path.join(exp, "metadata.json"), JSON.stringify({ version }));

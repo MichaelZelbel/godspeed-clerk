@@ -17,6 +17,8 @@ import { readJson, writeJson } from "../lib/core/files.mjs";
 import { rebuild } from "../lib/install/rebuild.mjs";
 
 const md5 = (b) => crypto.createHash("md5").update(b).digest("hex");
+// Paperless 3 keeps SHA-256 checksums in its manifest (64 characters), as the real export does.
+const sha256 = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
 function exportOf(dir, docs) {
   const exp = path.join(dir, "export");
@@ -27,7 +29,7 @@ function exportOf(dir, docs) {
     const o = `originals/2026-10-22 Scan ${i}.pdf`, a = `archive/2026-10-22 Scan ${i}-archive.pdf`;
     fs.writeFileSync(path.join(exp, o), `%PDF-1.4 original ${i}`);
     fs.writeFileSync(path.join(exp, a), `%PDF-1.4 archive ${i}`);
-    manifest.push({ model: "documents.document", pk: i, fields: { title: `Paper ${i}`, checksum: md5(fs.readFileSync(path.join(exp, o))), archive_checksum: md5(fs.readFileSync(path.join(exp, a))) }, __exported_file_name__: o, __exported_archive_name__: a });
+    manifest.push({ model: "documents.document", pk: i, fields: { title: `Paper ${i}`, checksum: sha256(fs.readFileSync(path.join(exp, o))), archive_checksum: sha256(fs.readFileSync(path.join(exp, a))) }, __exported_file_name__: o, __exported_archive_name__: a });
   }
   fs.writeFileSync(path.join(exp, "manifest.json"), JSON.stringify(manifest));
   fs.writeFileSync(path.join(exp, "metadata.json"), JSON.stringify({ version: "3.3.3" }));
