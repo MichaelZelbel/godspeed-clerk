@@ -111,3 +111,73 @@ test("a password a person can type on a phone", () => {
   assert.notEqual(p, newPassword());
   assert.ok(!/[01ilo]/.test(p));
 });
+
+// REVIEW 2: an update interrupted at any step (a kill, a reboot, a restart of the service) is
+// finished or undone by the next look, and the Clerk is never wrong about the version it runs.
+function journalWorld(opts) {
+  const w = world(opts);
+  w.saved = [];
+  w.host.save = (rec) => w.saved.push(rec.update ? rec.update.stage : null);
+  return w;
+}
+
+test("REVIEW 2: an update writes where it is before every step, and clears it at the end", async () => {
+  const w = journalWorld();
+  await w.host.update({ to: "3.3.3", token: "t" });
+  assert.deepEqual(w.saved, ["stopping", "copied", "started", null]);
+  assert.equal(w.rec.update, undefined);
+});
+
+test("REVIEW 2: killed after the new version started and migrated: the next look finishes the update", async () => {
+  const w = journalWorld();
+  const backup = path.join(w.dir, "backups", "before-3.3.3-x");
+  w.host.stop(); w.host.copyAside(backup);
+  w.rec.update = { to: "3.3.3", from: "3.2.1", image_from: imageFor("3.2.1"), image_to: imageFor("3.3.3"), backup, docs: 3, stage: "started" };
+  w.host.setImage(imageFor("3.3.3")); w.host.up();
+  const r = await w.host.recover({ token: "t" });
+  assert.equal(r.outcome, "new");
+  assert.equal(w.rec.version, "3.3.3");
+  assert.equal(w.rec.update, undefined);
+});
+
+test("REVIEW 2: killed while the database was being put back: the next look puts it back whole and starts the old version", async () => {
+  const w = journalWorld();
+  const backup = path.join(w.dir, "backups", "before-3.3.3-y");
+  w.host.stop(); w.host.copyAside(backup);
+  w.host.setImage(imageFor("3.3.3")); w.host.up(); // the new version migrated the database
+  fs.writeFileSync(w.marker(), "half copied");
+  w.rec.update = { to: "3.3.3", from: "3.2.1", image_from: imageFor("3.2.1"), image_to: imageFor("3.3.3"), backup, docs: 3, stage: "rolling-back" };
+  w.host.down();
+  const r = await w.host.recover({ token: "t" });
+  assert.equal(r.rolledBack, true);
+  assert.equal(fs.readFileSync(w.marker(), "utf8"), "3.2.1", "the old database, whole");
+  assert.equal(w.st.version, "3.2.1");
+  assert.equal(w.rec.version, "3.2.1");
+  assert.equal(w.rec.update, undefined);
+});
+
+test("REVIEW 2: killed after the copy, before the new version: the old version runs again, unchanged", async () => {
+  const w = journalWorld();
+  const backup = path.join(w.dir, "backups", "before-3.3.3-z");
+  w.host.stop(); w.host.copyAside(backup);
+  w.rec.update = { to: "3.3.3", from: "3.2.1", image_from: imageFor("3.2.1"), image_to: imageFor("3.3.3"), backup, docs: 3, stage: "copied" };
+  const r = await w.host.recover({ token: "t" });
+  assert.equal(r.ok, false);
+  assert.equal(r.rolledBack, true);
+  assert.equal(w.st.version, "3.2.1");
+  assert.equal(w.rec.update, undefined);
+  const s = journalWorld();
+  s.rec.update = { to: "3.3.3", from: "3.2.1", image_from: imageFor("3.2.1"), image_to: imageFor("3.3.3"), backup: path.join(s.dir, "backups", "none"), docs: 3, stage: "stopping" };
+  s.host.stop();
+  const r2 = await s.host.recover({ token: "t" });
+  assert.equal(r2.outcome, "old");
+  assert.equal(s.st.running, true);
+  assert.equal(s.rec.update, undefined);
+});
+
+test("a rolled-back update's copy is pruned like the others", async () => {
+  const w = journalWorld();
+  for (const n of ["before-3.3.3-a", "before-3.3.3-b"]) fs.mkdirSync(path.join(w.dir, "backups", n), { recursive: true });
+  await w.host.update({ to: "3.3.3", token: "t", failAfterStart: true });
+  assert.equal(fs.readdirSync(path.join(w.dir, "backups")).length, 2);
+});

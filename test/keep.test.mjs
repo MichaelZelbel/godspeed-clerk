@@ -50,7 +50,7 @@ function keepWorld() {
   writeJson(paths.installed, { dir, project: "godspeed-clerk-paperless", port: 8010, version: "3.3.3", stage: "done", user: "alex", host: "srv1.example.test", https_port: 48444 });
   let t = Date.parse("2026-10-23T10:00:00Z");
   const out = [], logs = [], calls = [];
-  const w = { up: true, calls, out, logs, advance: (min) => { t += min * 60000; } };
+  const w = { up: true, calls, out, logs, advance: (min) => { t += min * 60000; }, ctxPaths: paths };
   const ctx = { paths, clock: () => t, log: (l) => logs.push(l), outbox: (n) => out.push(n) };
   const run = (cmd, args) => { calls.push([cmd, ...args].join(" ")); if (cmd === "docker" && args.includes("up")) w.up = true; return { status: 0, stdout: "", stderr: "" }; };
   const fetchImpl = async () => { if (!w.up) throw Object.assign(new Error("fetch failed"), { cause: { code: "ECONNREFUSED" } }); return new Response("{}", { status: 401 }); };
@@ -122,4 +122,16 @@ test("the new messages: each in plain words, once, while still true", async () =
     await w.run();
     assert.equal(w.messages.length, n, "said once");
   } finally { await w.close(); }
+});
+
+test("REVIEW 2: the keep-running step finishes an update that was cut off, and tells only what is true", async () => {
+  const w = keepWorld();
+  const rec = readJson(w.ctxPaths.installed);
+  fs.writeFileSync(path.join(rec.dir, "compose.yaml"), "services:\n  webserver:\n    image: ghcr.io/paperless-ngx/paperless-ngx:3.2.1@sha256:old\n");
+  writeJson(w.ctxPaths.installed, { ...rec, version: "3.2.1", update: { to: "3.3.3", from: "3.2.1", image_from: "ghcr.io/paperless-ngx/paperless-ngx:3.2.1@sha256:old", image_to: "ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:new", backup: path.join(rec.dir, "backups", "none"), docs: 0, stage: "stopping" } });
+  w.up = false;
+  const r = await w.step();
+  assert.equal(r.recovered.outcome, "old");
+  assert.equal(readJson(w.ctxPaths.installed).update, undefined, "the journal is cleared");
+  assert.deepEqual(w.out.map((n) => [n.kind, n.rolled_back]), [["update-failed", true]], "told: it runs the old version, as before");
 });

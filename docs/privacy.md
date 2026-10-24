@@ -70,10 +70,11 @@ through its HTTPS address.
 
 ## The restore copy
 
-Every night the folder "The Clerk" in your drive gets the Clerk's records (`records/clerk-records.json`:
+Every night the folder "The Clerk" in your drive gets, in folders of this installation's own id, the
+Clerk's records (`records/<id>/clerk-records.json`:
 its settings, your folder plan, and per document numbers, marks, folder ids and links, never a
 document's text or title), and, on a Paperless the Clerk installed, Paperless's complete export
-(`paperless/`): every document's file, and a manifest with every title, tag, date and the documents'
+(`paperless/<id>/`): every document's file, and a manifest with every title, tag, date and the documents'
 text, your account with its password's hash and its second factor. It is a copy of what your
 Paperless holds, in your own drive; anyone who can open your drive can open it. A Paperless where
 another account keeps papers is never exported.

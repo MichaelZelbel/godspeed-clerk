@@ -294,16 +294,19 @@ async function partA() {
   const cp = await clerk("a", "copy", env);
   check(cp.code === 0 && /restore copy is whole/.test(cp.out), `the copy: ${cp.all.trim().replace(/\n/g, " | ")}`);
   const D = S.drives.main;
-  const restore = JSON.parse(D.byPath("The Clerk/paperless/restore.json")?.content?.toString() || "{}");
+  // This installation's own copy folder (its copy id).
+  A.copyId = (await readIn("a", "/var/lib/godspeed/clerk/settings.json"))?.copy_id;
+  const P = `The Clerk/paperless/${A.copyId}`;
+  const restore = JSON.parse(D.byPath(`${P}/restore.json`)?.content?.toString() || "{}");
   check(restore.paperless_version === "3.3.3" && restore.documents === A.slugs.length && restore.user === login.user, `restore.json: Paperless ${restore.paperless_version}, ${restore.documents} documents, account ${restore.user}`);
-  check(!!D.byPath("The Clerk/paperless/manifest.json") && !!D.byPath("The Clerk/records/clerk-records.json") && filesOf(D).filter((f) => D.pathOf(f.id).startsWith("The Clerk/paperless/originals/")).length === A.slugs.length, "the export (originals, manifest) and the Clerk's records are in its own folder");
+  check(!!A.copyId && !!D.byPath(`${P}/manifest.json`) && !!D.byPath(`The Clerk/records/${A.copyId}/clerk-records.json`) && filesOf(D).filter((f) => D.pathOf(f.id).startsWith(`${P}/originals/`)).length === A.slugs.length, "the export (originals, manifest) and the Clerk's records are in its own folder");
   check(filesOf(D).every((f) => /^(Paperwork|The Clerk|Holiday photos)\//.test(D.pathOf(f.id))), "nothing written outside the documents folder and the Clerk's own folder");
   const w0 = D.writes.length;
   const again = await clerk("a", "copy", env);
-  const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/(originals|archive)\//.test(p));
+  const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/[^/]+\/(originals|archive)\//.test(p));
   check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.all.trim().replace(/\n/g, " | ")})`);
   // (Every whole copy writes restore.json anew, with its time: the one to compare with is the last.)
-  A.restoreAt = JSON.parse(D.byPath("The Clerk/paperless/restore.json").content.toString()).made_at;
+  A.restoreAt = JSON.parse(D.byPath(`${P}/restore.json`).content.toString()).made_at;
   A.snapshot = await snapshotOf(p, A.tok);
   A.plan = await readIn("a", "/var/lib/godspeed/clerk/plan.json");
   A.counts = { files: markedFiles(D).length, notes: (await S.notes()).length, items: (await S.items()).length, deadlines: (await S.deadlines()).length };
@@ -316,7 +319,7 @@ async function partA() {
   await uploadKit(p, sam.body.token, ["second-account-letter"], 30);
   const shared = await clerk("a", "copy", env);
   check(/another account keeps documents/.test(shared.out), `the export stops: ${shared.all.trim().replace(/\n/g, " | ")}`);
-  check(JSON.parse(D.byPath("The Clerk/paperless/restore.json").content.toString()).made_at === A.restoreAt, "the restore copy in the drive is the one from before");
+  check(JSON.parse(D.byPath(`The Clerk/paperless/${A.copyId}/restore.json`).content.toString()).made_at === A.restoreAt, "the restore copy in the drive is the one from before");
   const samId = (await p.all(A.tok, "/api/documents/?page_size=100&fields=id,owner,original_file_name")).find((d) => /16-17-30/.test(d.original_file_name))?.id;
   check(!!samId && !markedFiles(D).some((f) => f.appProperties.clerkDoc === String(samId)) && !filesOf(D).some((f) => /16-17-30/.test(f.name)), "nothing of that account reaches the drive");
   const sharedMsg = await waitFor("the shared message", () => S.sent.find((m) => /another account/.test(m)), { minutes: 4 });
@@ -353,6 +356,10 @@ async function partB() {
   check(JSON.stringify(snap) === JSON.stringify(A.snapshot), `every document, title, tag and date of the original (${snap.length} of ${A.snapshot.length})`);
   if (JSON.stringify(snap) !== JSON.stringify(A.snapshot)) note(`B: ${JSON.stringify(snap).slice(0, 400)} / A: ${JSON.stringify(A.snapshot).slice(0, 400)}`);
   check(JSON.stringify((await readIn("b", "/var/lib/godspeed/clerk/plan.json"))?.rules) === JSON.stringify(A.plan?.rules), "the confirmed folder plan");
+  const thumbs = await Promise.all(snap.map((d) => p.req("GET", `/api/documents/${d.id}/thumb/`, { headers: { Authorization: `Token ${s.body.token}` }, raw: true }).then((r) => r.status)));
+  check(thumbs.every((x) => x === 200), `every paper has its first-page picture again (${thumbs.join(", ")})`);
+  const ph = await clerk("b", "phone", env);
+  check(!ph.out.includes("password ") || /with your Paperless password/.test(ph.out), "the phone step names the old login, not the empty installation's");
   const st = await clerk("b", "status", env);
   note(st.out.split("\n").slice(0, 6).join(" | "));
   // The next runs (the worker's, and two more by hand).

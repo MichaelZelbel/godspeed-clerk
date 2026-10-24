@@ -38,6 +38,9 @@ function fakeHost({ owners = { alex: 2 }, docs = 2 } = {}) {
   };
   return host;
 }
+// This installation's folder of the restore copy (copy_id, made with its first copy).
+const P = (w) => `The Clerk/paperless/${readJson(w.paths.settings).copy_id}`;
+const R = (w) => `The Clerk/records/${readJson(w.paths.settings).copy_id}`;
 const ownFiles = (w) => w.drive.files().filter((f) => w.drive.pathOf(f.id).startsWith("The Clerk/") && f.mimeType !== "application/vnd.google-apps.folder");
 const writesIn = (w, from) => w.drive.writes.slice(from).map((x) => w.drive.pathOf(x.id));
 
@@ -50,12 +53,13 @@ test("F9: on a Paperless the Clerk installed, its export and the Clerk's records
     const r = await copyStep(w.context(), { host, user: "alex", force: true });
     assert.equal(r.done, true);
     const paths = ownFiles(w).map((f) => w.drive.pathOf(f.id)).sort();
-    assert.deepEqual(paths, ["The Clerk/paperless/archive/2026-10-22 Scan 1-archive.pdf", "The Clerk/paperless/archive/2026-10-22 Scan 2-archive.pdf", "The Clerk/paperless/clerk-records.json", "The Clerk/paperless/manifest.json", "The Clerk/paperless/metadata.json", "The Clerk/paperless/originals/2026-10-22 Scan 1.pdf", "The Clerk/paperless/originals/2026-10-22 Scan 2.pdf", "The Clerk/paperless/restore.json", "The Clerk/records/clerk-records.json"]);
+    const p = P(w), rr = R(w);
+    assert.deepEqual(paths, [`${p}/archive/2026-10-22 Scan 1-archive.pdf`, `${p}/archive/2026-10-22 Scan 2-archive.pdf`, `${p}/clerk-records.json`, `${p}/manifest.json`, `${p}/metadata.json`, `${p}/originals/2026-10-22 Scan 1.pdf`, `${p}/originals/2026-10-22 Scan 2.pdf`, `${p}/restore.json`, `${rr}/clerk-records.json`]);
     const order = writesIn(w, before);
     assert.ok(order.every((p) => p.startsWith("The Clerk")), "nothing written outside the Clerk's own folder");
-    assert.equal(order.at(-1), "The Clerk/paperless/restore.json", "restore.json last: the copy is whole only then");
-    assert.ok(order.indexOf("The Clerk/paperless/manifest.json") > order.indexOf("The Clerk/paperless/originals/2026-10-22 Scan 2.pdf"));
-    const restore = JSON.parse(w.drive.byPath("The Clerk/paperless/restore.json").content.toString());
+    assert.equal(order.at(-1), `${P(w)}/restore.json`, "restore.json last: the copy is whole only then");
+    assert.ok(order.indexOf(`${P(w)}/manifest.json`) > order.indexOf(`${P(w)}/originals/2026-10-22 Scan 2.pdf`));
+    const restore = JSON.parse(w.drive.byPath(`${P(w)}/restore.json`).content.toString());
     assert.equal(restore.paperless_version, "3.3.3");
     assert.equal(restore.documents, 2);
     assert.equal(restore.user, "alex");
@@ -64,7 +68,7 @@ test("F9: on a Paperless the Clerk installed, its export and the Clerk's records
     assert.equal(own.appProperties.clerkOwn, "1");
     assert.ok(ownFiles(w).every((f) => f.appProperties.clerkCopy === "1"), "every file carries the Clerk's mark");
     // F14: the Clerk's records hold no text of a document.
-    const bundle = w.drive.byPath("The Clerk/records/clerk-records.json").content.toString();
+    const bundle = w.drive.byPath(`${R(w)}/clerk-records.json`).content.toString();
     // (Lines that are the person's own address are in their profile setting, `about`, not the paper's.)
     for (const line of text("utility-invoice").split("\n").filter((l) => l.trim().length > 12 && !KIT.profile.includes(l.trim()))) assert.ok(!bundle.includes(line.trim()), `no "${line.trim()}" in the records`);
     assert.equal(JSON.parse(bundle).records.length, 2);
@@ -83,7 +87,7 @@ test("F9: the next night only what changed is uploaded", async () => {
     fs.writeFileSync(path.join(host.dir, "export", "originals", "2026-10-22 Scan 2.pdf"), "%PDF-1.4 original 2, changed");
     const b2 = w.drive.writes.length;
     await copyStep(w.context(), { host, user: "alex", force: true });
-    assert.deepEqual(writesIn(w, b2).filter((p) => /originals|archive/.test(p)), ["The Clerk/paperless/originals/2026-10-22 Scan 2.pdf"]);
+    assert.deepEqual(writesIn(w, b2).filter((p) => /originals|archive/.test(p)), [`${P(w)}/originals/2026-10-22 Scan 2.pdf`]);
     assert.equal(ownFiles(w).filter((f) => /Scan 2\.pdf$/.test(f.name)).length, 1, "the same file, its content replaced");
   } finally { await w.close(); }
 });
@@ -97,8 +101,8 @@ test("F9: a Paperless where another account keeps documents is never exported; n
     const r = await copyStep(w.context(), { host, user: "alex", force: true });
     assert.equal(r.shared, true);
     await copyStep(w.context(), { host, user: "alex", force: true });
-    assert.equal(w.drive.byPath("The Clerk/paperless"), null, "no export folder");
-    assert.ok(w.drive.byPath("The Clerk/records/clerk-records.json"), "the Clerk's own records still go");
+    assert.equal(w.drive.byPath(P(w)), null, "no export folder");
+    assert.ok(w.drive.byPath(`${R(w)}/clerk-records.json`), "the Clerk's own records still go");
     assert.equal(w.fileOf("second-account-letter").length, 0, "the other account's paper is not in the drive");
     await w.run();
     await w.run();
@@ -117,17 +121,16 @@ test("F9: pointed at a Paperless it did not install, the Clerk never runs the ex
     const r = await copyStep(w.context(), { host: null, user: "alex", force: true });
     assert.equal(r.done, true);
     assert.equal(r.exported, false);
-    assert.deepEqual(ownFiles(w).map((f) => w.drive.pathOf(f.id)), ["The Clerk/records/clerk-records.json"]);
+    assert.deepEqual(ownFiles(w).map((f) => w.drive.pathOf(f.id)), [`${R(w)}/clerk-records.json`]);
   } finally { await w.close(); }
 });
 
 test("the copy is due once a night from copy_hour, and on every run while an upload goes on", () => {
   const at = (h, day = 23) => new Date(2026, 9, day, h, 30).getTime();
-  assert.equal(copyDue({}, { copy_hour: 2 }, at(1)), false);
-  assert.equal(copyDue({}, { copy_hour: 2 }, at(2)), true);
-  assert.equal(copyDue({ copy: { day: "2026-10-23" } }, { copy_hour: 2 }, at(14)), false);
-  assert.equal(copyDue({ copy: { day: "2026-10-23" } }, { copy_hour: 2 }, at(3, 24)), true);
-  assert.equal(copyDue({ copy: { day: "2026-10-23", phase: "upload" } }, { copy_hour: 2 }, at(14)), true);
+  const done = { copy: { day: "2026-10-23", last_ok_at: new Date(2026, 9, 23, 2, 40).toISOString(), phase: "done" } };
+  assert.equal(copyDue(done, { copy_hour: 2 }, at(14)), false);
+  assert.equal(copyDue(done, { copy_hour: 2 }, at(3, 24)), true);
+  assert.equal(copyDue({ copy: { ...done.copy, phase: "upload" } }, { copy_hour: 2 }, at(14)), true);
 });
 
 test("a first night with many files uploads a few minutes per run and is whole only at the end", async () => {
@@ -138,11 +141,11 @@ test("a first night with many files uploads a few minutes per run and is whole o
     const clock = () => { t += 15000; return t; }; // every look at the clock: 15 seconds later
     const r1 = await copyStep(w.context({ clock }), { host, user: "alex" });
     assert.equal(r1.done, false);
-    assert.equal(w.drive.byPath("The Clerk/paperless/restore.json"), null, "not whole yet");
+    assert.equal(w.drive.byPath(`${P(w)}/restore.json`), null, "not whole yet");
     assert.equal(readJson(w.paths.state).copy.phase, "upload");
     let n = 0;
     while (!readJson(w.paths.state).copy.last_ok_at && n++ < 10) await copyStep(w.context({ clock }), { host, user: "alex" });
-    assert.ok(w.drive.byPath("The Clerk/paperless/restore.json"), "whole");
+    assert.ok(w.drive.byPath(`${P(w)}/restore.json`), "whole");
     assert.equal(host.exports, 1, "one export for the night");
     assert.equal(ownFiles(w).filter((f) => /\.pdf$/.test(f.name)).length, 12);
   } finally { await w.close(); }
@@ -171,6 +174,8 @@ test("F9: a rebuild goes only into an empty Paperless the Clerk installed; one t
   try {
     await copyStep(w.context(), { host: fakeHost(), user: "alex", force: true });
     assert.ok((await findRestoreCopy(new Drive({ creds: readJson(w.paths.drive), env: w.env }))).restore);
+    // (As on a new server: this installation's own copy is not one to rebuild from.)
+    writeJson(w.paths.settings, { ...readJson(w.paths.settings), copy_id: null });
     const none = await rebuild(w.context(), {});
     assert.match(none.why, /has not installed a Paperless/);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-pl-"));

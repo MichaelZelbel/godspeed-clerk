@@ -91,9 +91,16 @@ stay as they are.
 
 **What the server needs** (the installer checks it first and installs nothing when it is short):
 1.5 GB of memory free, 8 GB of disk free, Docker with Compose, and the web address Godspeed's own
-installer gave it. Papers in your language are read in your language and English:
-`bash -s -- --language German` (the starter set of document types and tags follows the language
-you talk to Godspeed in, `--chat-language`, which is the same unless you say otherwise).
+installer gave it. Your papers then take their space twice on the server: once in Paperless, once
+in its nightly export for the restore copy.
+
+**Papers in another language** are read in that language and English, and the starter set of
+document types and tags comes in the language you talk to Godspeed in (`--chat-language`, the same
+unless you say otherwise):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/install.sh | bash -s -- --language German
+```
 
 ## Your first fifteen minutes
 
@@ -133,25 +140,35 @@ From then on you scan, and the Clerk does the rest. "How far is the pile?" works
   that matters, and it is there within ten minutes of a scan.
 - **The server** is the workplace: Paperless keeps every paper so the phone app can show and search
   them all.
-- **The restore copy**: every night, in a folder "The Clerk" in your drive, Paperless's complete
-  export (every file, title, tag and date) and the Clerk's own records. Only what changed since the
-  night before is uploaded.
+- **The restore copy**: in a folder "The Clerk" in your drive, Paperless's complete export (every
+  file, title, tag and date) and the Clerk's own records; the first one right after you resume the
+  Clerk, then every night. Only what changed is uploaded, and it counts as whole only when every
+  file in the drive is what the export says.
 - **What can still be lost**: a paper scanned in the minutes before a server fails, before its
   copy reached your drive. Keep a paper until it shows "in drive" in your Documents list.
 
 ## A new server
 
 When a server is gone, run the install line on the new one (it installs an empty Paperless) and
-connect the same Google Drive. The Clerk finds its restore copy and offers to rebuild:
+connect the same Google Drive, with the same Google app as before. The Clerk finds its restore copy
+and says so. Rebuild before you name a documents folder or confirm a plan (the copy brings the plan
+back with it):
 
 ```
+godspeed-clerk drive connect --client-file <the same app's JSON>
+godspeed-clerk drive finish "<the address your browser showed after Allow>"
 godspeed-clerk restore
 ```
 
-It installs the Paperless version that made the copy, imports every paper with its titles, tags
-and dates, takes its own records back, and then updates Paperless as usual. Your phone signs in
-once more (the copy keeps no sign-ins), with the same password and authenticator code. Nothing is
-filed, noted or reminded twice.
+It checks every file of the copy against the export's own list first, installs the Paperless
+version that made the copy, imports every paper with its titles, tags and dates, takes its own
+records back, and then updates Paperless as usual. Your phone signs in once more (the copy keeps no
+sign-ins), with the same password and authenticator code. Nothing is filed, noted or reminded twice.
+Cut off half way (a dropped connection), `godspeed-clerk restore` again finishes it. A plan
+confirmed on the new, empty Paperless while a copy waits is stopped with this same advice; to start
+empty on purpose: `godspeed-clerk plan confirm --start-fresh`. Each server writes its copy into a
+folder of its own, so a new server never writes over the copy of the old one;
+`godspeed-clerk restore --check` lists them.
 
 A Paperless where another account keeps papers too is never copied this way (its export would hold
 their papers); the Clerk tells you once that a shared Paperless needs a backup its owners agree on.
@@ -164,7 +181,8 @@ On a Paperless it installed, the Clerk:
 
 - **updates** only to versions it was tested with, at night, after that night's restore copy. Before
   an update it keeps a copy of Paperless's database, its settings and the version it ran; when the
-  new version does not come up healthy, it puts all of that back and tells you once. Now:
+  new version does not come up healthy, it puts all of that back and tells you once. An update cut
+  off half way (a reboot) is finished or undone at the Clerk's next look. Now:
   `godspeed-clerk paperless update`.
 - **restarts** Paperless when it stops, and tells you if that does not help within half an hour.
 - **warns** before the disk is full.

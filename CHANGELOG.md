@@ -30,6 +30,19 @@
   Clerk keeps the person's time zone from their Godspeed notebook.
 - Fixed: a Clerk that lost its records found its own To sort page again only when Godspeed sorted;
   from "Paperless sorts" it made a second one.
+- What the independent review found, fixed before release: a new server's first copy wrote over
+  the restore copy of the old one (each installation now writes into folders of its own id, a
+  rebuild takes the old id over, and a plan confirmed on a new empty Paperless while a copy waits is
+  stopped with the way to rebuild); an update cut off half way, or during its rollback, left the
+  Clerk wrong about the version and the copy unrestorable (the update keeps a journal and is
+  finished or undone at the next look; the copy is labelled from the export's own metadata; only
+  true messages); a rebuild cut off half way could not be finished (it keeps a journal too); a file
+  changed in the drive was imported silently (every file is checked against the export's manifest
+  before anything is wiped, and restore.json is written only when the drive holds every file as the
+  manifest says; the drive's own list is read back at each export); after a rebuild the empty
+  installation's login was handed out and the thumbnails were gone; a forced copy could finish an
+  old export; a copy that kept failing was never told; a connection Google dropped during the export
+  failed the copy; a shared Paperless was never updated; the update ran in daytime.
 - The systemd service reads extra settings from `service.env` in the state folder.
 - install.sh finds the Node.js Godspeed's own installer keeps in the Godspeed folder, and takes the
   Clerk from `GODSPEED_CLERK_TARBALL` when given; install.ps1 for Windows; INSTALL-FOR-ASSISTANTS.md.

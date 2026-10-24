@@ -320,24 +320,44 @@ started at once (`docker compose up -d`), then at most every ten minutes; still 
 hour, one message. Hourly: the disk (under 3 GB or 5 percent: one message per low stretch) and the
 address.
 
-**An update** (`host.mjs`, F3) goes only to a tested version, after a whole restore copy: the new
+**An update** (`host.mjs`, F3) goes only to a tested version, after a whole restore copy (a shared
+Paperless has none: there the update keeps only its copy on the server), in the night's hours: the new
 image is pulled while the old one runs; Paperless stops; the database folder, the search index
 folder, compose.yaml, paperless.env and the version are copied to `backups/before-<version>-<time>`;
 the new version starts and runs its migrations. Healthy within ten minutes means: the API answers as
 the new version, sees as many documents as before, and a document downloads. Otherwise it stops,
 everything copied is put back, the old version starts and is checked the same way, and the person
 hears it once. The last two copies are kept. The worker updates at night; a version that failed is
-not tried again by itself.
+not tried again by itself. Before each step the update writes where it is (`update` in
+installed.json: stopping, copied, started, rolling-back, put-back); cut off, it is finished (the new
+version answers healthy) or undone (put back from the copy) at the next look: the worker's
+keep-running step, every `paperless` command, and setup, which also waits for the run lock so it
+never touches Paperless during an update. The version the Clerk keeps is the one Paperless says it
+runs; the restore copy is labelled with the one the export's own metadata names.
 
-**The restore copy** (`restore.mjs`, F9): see its header. The export runs only on a Paperless the
-Clerk installed and only while no other account owns documents there (asked of Paperless's own
-database, the bin included); it is `document_exporter -d -c -nt -p` into the Paperless folder, and
-only files whose checksum changed are uploaded (a file whose size and time match what was uploaded
-is not read again), a few minutes per run, `restore.json` last.
+**The restore copy** (`restore.mjs`, F9): see its header. Each installation writes only into the
+folders of its own copy id (`records/<id>/`, `paperless/<id>/`; a rebuild takes the old id over).
+The export runs only on a Paperless the Clerk installed and only while no other account owns
+documents there (asked of Paperless's own database, the bin included); it is
+`document_exporter -d -c -nt -p` into the Paperless folder. At each export the drive's own list of
+the copy is read back, so a file changed or lost there is sent again; only files whose checksum
+changed are uploaded (a file whose size and time match what was uploaded, and that the drive still
+holds so, is not read again), a few minutes per run. `restore.json` comes last, and only when every
+file the manifest names is in the drive with the manifest's own checksum. A forced copy (before an
+update, `godspeed-clerk copy`) always exports anew. A failed copy is tried again within the hour
+with a new export; the third failure in a row is told once. The first copy runs as soon as it can,
+then once a night in the four hours from `copy_hour`, or at once when a night was missed.
 
-**The rebuild** (`rebuild.mjs`): only into an empty Paperless the Clerk installed. The export comes
+**The rebuild** (`rebuild.mjs`): only into an empty Paperless the Clerk installed, from the newest
+copy with papers that is not this installation's own (`--copy <id>` picks another). The export comes
 back from the drive file by file, each checked against the checksum the drive keeps, the manifest
-against the one `restore.json` names; Paperless's data folders are emptied and the version that made
-the export starts; `document_importer` brings back every document with its number, the account with
-its password and second factor; the account's token is made (the export has none); the Clerk's
-records of that night come back (settings that belong to this machine stay); then the usual update.
+against the one `restore.json` names, and every file against the manifest's own checksum, before
+anything is wiped (`--anyway` imports papers whose files do not match, named first). Paperless's
+data folders are emptied and the version that made the export starts; `document_importer` brings
+back every document with its number, the account with its password and second factor; the
+thumbnails are made again (`document_thumbnails`); the account's token is made (the export has
+none); the Clerk's records of that night come back (settings that belong to this machine stay; the
+copy id is the old one's); the empty installation's login is no longer handed out; then the usual
+update. A journal (`rebuild` in installed.json) lets `restore` finish a rebuild that was cut off.
+`plan confirm` on a new, empty Paperless while another installation's copy with papers waits is
+stopped with the way to rebuild (`--start-fresh` goes on).
