@@ -59,7 +59,7 @@ test("F1: a server without the web address Godspeed's installer gives it gets no
 test("F2: the phone's words name the app, the address, the login and the second factor, without dashes", () => {
   const t = phoneWords({ address: "https://srv1.example.test:48444", user: "alex" }, { user: "alex", password: "abcd-efgh-jkmn-pqrs-tuvw", secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", otpauth: "otpauth://totp/x", recovery: ["12345678"] });
   for (const want of ["Swift Paperless", "https://srv1.example.test:48444", "alex", "abcd-efgh-jkmn-pqrs-tuvw", "GEZD GNBV GY3T QOJQ GEZD GNBV GY3T QOJQ", "12345678", "authenticator"]) assert.ok(t.includes(want), want);
-  assert.ok(!/[–—]/.test(t));
+  assert.ok(!/[\u2013\u2014]/.test(t));
   const forgotten = phoneWords({ address: "https://srv1.example.test:48444", user: "alex" }, { user: "alex" });
   assert.ok(!/undefined|null/.test(forgotten), forgotten);
 });

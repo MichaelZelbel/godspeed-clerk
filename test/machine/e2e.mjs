@@ -8,10 +8,11 @@
 //   A  all defaults: Paperless over HTTPS with a second factor, the starter set, the copy scheduled;
 //      the drive and the plan; the phone signs in like Swift Paperless and uploads made-up scans,
 //      which are sorted, filed, noted and reported; Godspeed's Caddyfile rewritten by an update and
-//      put back; the restore copy; a second account's paper stops the export.
+//      put back; the restore copy, also after its export folder was deleted and made again by hand;
+//      a second account's paper stops the export.
 //   B  thrown-away A rebuilt on a fresh machine from the drive: same version first, every document,
-//      title, tag and date, the plan; the phone signs in with the same login; no second file,
-//      note, item or deadline.
+//      title, tag and date, the plan; a rebuild cut off with a half-written archive file is finished
+//      whole; the phone signs in with the same login; no second file, note, item or deadline.
 //   C  Paperless 3.2.1, German: the German starter set; an update to 3.3.3 forced to fail after the
 //      new version migrated the database ends on 3.2.1 with its database and every document
 //      readable; then the update; a stopped Paperless runs again on the next check.
@@ -305,6 +306,10 @@ async function partA() {
   const again = await clerk("a", "copy", env);
   const resent = D.writes.slice(w0).map((x) => D.pathOf(x.id)).filter((p) => /The Clerk\/paperless\/[^/]+\/(originals|archive)\//.test(p));
   check(again.code === 0 && resent.length === 0, `the next copy sends no scan again, only what changed (${again.all.trim().replace(/\n/g, " | ")})`);
+  // Someone making room deletes Paperless's export folder and makes it again by hand (owned by root).
+  await inM("a", "rm -rf /opt/godspeed-clerk/paperless/export && mkdir /opt/godspeed-clerk/paperless/export");
+  const remade = await clerk("a", "copy", env);
+  check(remade.code === 0 && /restore copy is whole/.test(remade.out), `an export folder deleted and made again by hand: the copy is whole again (${remade.all.trim().replace(/\n/g, " | ").slice(0, 300)})`);
   // (Every whole copy writes restore.json anew, with its time: the one to compare with is the last.)
   A.restoreAt = JSON.parse(D.byPath(`${P}/restore.json`).content.toString()).made_at;
   A.snapshot = await snapshotOf(p, A.tok);
@@ -358,6 +363,24 @@ async function partB() {
   check(JSON.stringify((await readIn("b", "/var/lib/godspeed/clerk/plan.json"))?.rules) === JSON.stringify(A.plan?.rules), "the confirmed folder plan");
   const thumbs = await Promise.all(snap.map((d) => p.req("GET", `/api/documents/${d.id}/thumb/`, { headers: { Authorization: `Token ${s.body.token}` }, raw: true }).then((r) => r.status)));
   check(thumbs.every((x) => x === 200), `every paper has its first-page picture again (${thumbs.join(", ")})`);
+
+  section("B: a rebuild cut off while the importer wrote the files is finished whole (F9)");
+  // As after a cut: the database whole, one paper's archive file (the searchable PDF the phone shows)
+  // half written, the journal at "imported".
+  const restoreA = JSON.parse(S.drives.main.byPath(`The Clerk/paperless/${A.copyId}/restore.json`).content.toString());
+  const recB = await readIn("b", "/var/lib/godspeed/clerk/installed.json");
+  recB.rebuild = { copy_id: A.copyId, made_at: restoreA.made_at, documents: restoreA.documents, user: restoreA.user, version: restoreA.paperless_version, stage: "imported", at: new Date().toISOString() };
+  await inM("b", "cat > /var/lib/godspeed/clerk/installed.json", { input: JSON.stringify(recB, null, 1) });
+  const victim = (await inM("b", "find /opt/godspeed-clerk/paperless/data/media/documents/archive -name '*.pdf' | sort | head -1")).out.trim();
+  const whole = (await inM("b", `md5sum "${victim}"`)).out.split(" ")[0];
+  await inM("b", `s=$(stat -c %s "${victim}"); truncate -s $((s / 2)) "${victim}"`);
+  const fin2 = await clerk("b", "restore", env);
+  note(fin2.all.trim().split("\n").join(" | ").slice(0, 600));
+  const after = (await inM("b", `md5sum "${victim}"`)).out.split(" ")[0];
+  check(fin2.code === 0 && /without their files; importing again/.test(fin2.out) && /Paperless is rebuilt/.test(fin2.out), "finishing it notices the half-written archive file and imports again");
+  check(!!victim && after === whole, `that paper's archive file is whole again (${victim.split("/").pop()})`);
+  const sane = await inM("b", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless exec -T webserver document_sanity_checker --no-progress-bar 2>&1 | tail -3");
+  check(/No issues detected/i.test(sane.out), `Paperless's own sanity check: ${sane.out.trim().split("\n").pop()}`);
   const ph = await clerk("b", "phone", env);
   check(!ph.out.includes("password ") || /with your Paperless password/.test(ph.out), "the phone step names the old login, not the empty installation's");
   const st = await clerk("b", "status", env);

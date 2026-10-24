@@ -54,6 +54,14 @@
   (the folder is made again and Paperless started afresh); `restore --check` on the server that made
   a copy did not list it; the install line during a cut-off rebuild ended with the first steps; a
   scan read during an update's health check could undo the update.
+- What the third review round left (its verdict: yes), fixed too: a half-written archive file passed
+  the files check (the archive's checksum is compared now); papers deleted in Paperless still sit in
+  its trash and stop a rebuild (the advice and the refusal say to empty it); with copies of two
+  servers in the drive the one that copied last was taken (now the one holding the newest paper,
+  and when both copied the same week the person says which); an export folder made again by hand
+  made Paperless's exporter fail for good (Paperless is started afresh then too); thumbnails are
+  tried twice and a failure is told as it is; import, export, index and thumbnails may take hours;
+  after a rebuild the person hears that the old copy stays in the drive.
 - The systemd service reads extra settings from `service.env` in the state folder.
 - install.sh finds the Node.js Godspeed's own installer keeps in the Godspeed folder, and takes the
   Clerk from `GODSPEED_CLERK_TARBALL` when given; install.ps1 for Windows; INSTALL-FOR-ASSISTANTS.md.

@@ -77,3 +77,8 @@
   (an old server still running overwrote it), the status line of every installed Paperless, update
   messages said while no longer true, a cut-off update that changed nothing never tried again, a
   deleted export folder, the plan guard silenced by one scan, and four smaller ones.
+- Round 3: verdict yes. Its remaining should-fix items were done before the merge: the archive's
+  checksum in the files check, the trash in the rebuild's advice, the copy holding the newest paper
+  (asking when two servers copied the same week), an export folder made again by hand, honest
+  thumbnail words, long time limits, the old copy mentioned. The machine test now also cuts a
+  rebuild with a half-written archive and remakes the export folder by hand.

@@ -50,17 +50,24 @@ async function world() {
   fs.writeFileSync(path.join(pdir, "compose.yaml"), "services:\n  webserver:\n    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:x\n");
   writeJson(b.installed, { dir: pdir, project: "godspeed-clerk-paperless", port: 8010, version: "3.3.3", image: "ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:x", stage: "done", user: "me", host: "srv-b.example.test", https_port: 48444, address: "https://srv-b.example.test:48444" });
   writeJson(b.login, { user: "me", password: "aaaa-bbbb-cccc-dddd-eeee", secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", recovery: ["1"] });
-  const pd = { docs: 0, calls: [], importFails: false, filesBad: [] };
+  const pd = { docs: 0, trash: 0, calls: [], importFails: false, filesBad: [], thumbsFail: 0 };
+  // What Paperless's files check reports for each paper: [pk, its original's checksum as found, as
+  // it should be, has an archive, the archive's as found, as it should be].
+  const rows = () => Array.from({ length: pd.docs }, (_, i) => {
+    const pk = i + 1, bad = (pd.filesBad.find(([p]) => p === pk) || [])[1];
+    return [pk, bad === "original" ? null : `s${pk}`, `s${pk}`, true, bad === "archive" ? "half" : `a${pk}`, `a${pk}`];
+  });
   const run = (cmd, args, { input } = {}) => {
     const line = [cmd, ...args].join(" ");
     pd.calls.push(line.replace(pdir, "<dir>"));
     if (/manage\.py shell/.test(line)) {
       if (/owner__username/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify(pd.docs ? { kim: pd.docs } : {})}\n` };
-      if (/source_path/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify({ n: pd.docs, bad: pd.filesBad })}
-` };
+      if (/source_path/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify({ n: pd.docs, rows: rows() })}\n` };
+      if (/Document\.objects\.count\(\)/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify({ n: pd.trash })}\n` };
       if (/Token\.objects/.test(line)) return /^kim\n/.test(input || "") && pd.docs ? { status: 0, stdout: 'CLERK {"token":"tok-b","id":2}\n' } : { status: 1, stdout: "", stderr: "User matching query does not exist" };
     }
     if (/document_importer/.test(line)) { if (pd.importFails) return { status: 1, stdout: "", stderr: "the import broke" }; pd.docs = 3; }
+    if (/document_thumbnails/.test(line) && pd.thumbsFail > 0) { pd.thumbsFail--; return { status: 1, stdout: "", stderr: "a thumbnail failed" }; }
     return { status: 0, stdout: "" };
   };
   const fetchImpl = async () => new Response("{}", { status: 401 });
@@ -186,5 +193,77 @@ test("REVIEW B: a rebuilt server writes its restore copy into a folder of its ow
     const r = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl });
     assert.equal(r.ok, true, r.why);
     assert.notEqual(readJson(x.b.settings).copy_id, old);
+  } finally { await x.close(); }
+});
+
+test("REVIEW 3.1: finishing a cut-off rebuild notices a half-written archive file and imports again", async () => {
+  const x = await world();
+  try {
+    x.pd.docs = 3;
+    const rec = readJson(x.b.installed);
+    const found = readJson(x.w.paths.settings).copy_id;
+    const restore = JSON.parse(x.w.drive.files().find((f) => x.w.drive.pathOf(f.id) === `The Clerk/paperless/${found}/restore.json`).content.toString());
+    writeJson(x.b.installed, { ...rec, rebuild: { stage: "importing", copy_id: found, made_at: restore.made_at, documents: 3, user: "kim", version: "3.3.3" } });
+    x.pd.filesBad = [[1, "archive"]];
+    const origRun = x.run;
+    const run = (cmd, args, o) => { const r = origRun(cmd, args, o); if (/document_importer/.test(args.join(" "))) x.pd.filesBad = []; return r; };
+    const said = [];
+    const r = await rebuild(x.ctx(), { run, fetchImpl: x.fetchImpl, print: (l) => said.push(l) });
+    assert.equal(r.ok, true, r.why);
+    assert.ok(x.pd.calls.some((c) => /document_importer/.test(c)), "imported again");
+    assert.match(said.join("\n"), /1 paper\(s\) without their files/);
+  } finally { await x.close(); }
+});
+
+test("REVIEW 3.2: a rebuild refused because of papers in Paperless's trash says to empty the trash", async () => {
+  const x = await world();
+  try {
+    x.pd.docs = 1;
+    x.pd.trash = 1;
+    const r = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl });
+    assert.equal(r.ok, false);
+    assert.match(r.why, /1 of them in its trash/);
+    assert.match(r.why, /empty the trash/);
+    assert.ok(!x.pd.calls.some((c) => / down|rm -rf|importer/.test(c)), "nothing changed");
+  } finally { await x.close(); }
+});
+
+test("REVIEW 3.3: with copies of two servers made the same week, the rebuild asks which one, and takes the one named", async () => {
+  const x = await world();
+  try {
+    // A second server copied into the same drive this week (it holds a fourth paper).
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clerk-two-"));
+    const paths = statePaths(path.join(dir, "state"));
+    writeJson(paths.drive, readJson(x.w.paths.drive));
+    writeJson(paths.settings, { active: true });
+    await copyStep(buildContext(paths, { env: x.w.env }), { host: { dir, rec: { version: "3.3.3", host: "srv-c.example.test" }, owners: () => ({ kim: 4 }), exportNow: () => exportOf(dir, 4) }, user: "kim", force: true });
+    const second = readJson(paths.settings).copy_id, first = readJson(x.w.paths.settings).copy_id;
+    const r = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl });
+    assert.equal(r.ok, false);
+    assert.match(r.why, new RegExp(`${first}.*${second}|${second}.*${first}`, "s"), "both named");
+    assert.match(r.why, /--copy/);
+    assert.ok(!x.pd.calls.some((c) => / down|rm -rf|importer/.test(c)), "nothing changed");
+    const picked = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl, copyId: first });
+    assert.equal(picked.ok, true, picked.why);
+    assert.equal(picked.fromCopy, first);
+  } finally { await x.close(); }
+});
+
+test("REVIEW 3: thumbnails that fail once are made on a second try; if not, the person hears the truth", async () => {
+  const x = await world();
+  try {
+    x.pd.thumbsFail = 1;
+    const said = [];
+    assert.equal((await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl, print: (l) => said.push(l) })).ok, true);
+    assert.equal(x.pd.calls.filter((c) => /document_thumbnails/.test(c)).length, 2);
+    assert.ok(!/thumbnails were not/.test(said.join("\n")));
+    const y = await world();
+    try {
+      y.pd.thumbsFail = 2;
+      const t = [];
+      assert.equal((await rebuild(y.ctx(), { run: y.run, fetchImpl: y.fetchImpl, print: (l) => t.push(l) })).ok, true);
+      assert.ok(!/when a paper is opened/.test(t.join("\n")), "never the promise that Paperless makes them later");
+      assert.match(t.join("\n"), /document_thumbnails/);
+    } finally { await y.close(); }
   } finally { await x.close(); }
 });
