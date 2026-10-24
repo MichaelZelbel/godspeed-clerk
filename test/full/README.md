@@ -7,6 +7,12 @@ answers. With a checkout of the Godspeed product, a real Godspeed notebook too, 
 test in a folder of its own, and a pretend Telegram API for the messages. Everything is checked
 through Paperless's API, the drive and the notebook's own record requests.
 
+The optional-Drive story starts without a Google app or folder plan, writes notes, Documents
+items and normal deadlines through the real notebook, then connects Drive and confirms that the
+same records gain filed-copy links without duplicates. Its nobody-sorts setting keeps the kit
+unchanged for the remaining stories; the public-server phone test covers default AI sorting
+before Drive is connected (`test/public/README.md`, `phone.mjs --optional-drive`).
+
 It covers F4 (both "only files" settings leave Paperless exactly as it was and still write every
 note), F5 to F8 (every kit document as its expected-result file says, the folder plan, To sort
 first, same names, changes in Paperless and by hand, a hand-placed file, a deletion, lost and

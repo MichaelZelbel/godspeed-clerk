@@ -5,6 +5,6 @@
   "ignore": ["**/test/**", "**/tests/**", "**/__tests__/**", "**/fixtures/**", "**/*.test.*", "**/*.spec.*", "**/test-*", "**/test_*", "**/*_test.*", "docs/**", ".github/**", "**/retired/**", "**/vendor/**", "**/node_modules/**", "**/dist/**", "**/package-lock.json", "**/*.min.js", "**/*.gen.*"],
   "pages": {
     "add-ons": ["README.md"],
-    "clerk": ["INSTALL-FOR-ASSISTANTS.md", "README.md", "install.sh", "lib/commands/phone.mjs", "lib/commands/setup.mjs"]
+    "clerk": ["INSTALL-FOR-ASSISTANTS.md", "README.md", "install.sh", "lib/commands/phone.mjs", "lib/commands/settings.mjs", "lib/commands/setup.mjs", "lib/core/status.mjs", "lib/install/keep.mjs"]
   }
 }

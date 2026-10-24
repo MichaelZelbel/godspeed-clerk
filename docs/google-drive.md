@@ -1,5 +1,9 @@
 # Google Drive
 
+This connection is optional. Without it, resume the Clerk and scan into Paperless: sorting,
+notebook notes, the Documents list and deadlines work. There is no Clerk off-server backup until
+you connect Drive. Add it later for filed copies and a restore copy, using the steps below.
+
 ## Why the whole drive
 
 Google offers two kinds of permission for Drive. The narrow one reaches only files an app made

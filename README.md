@@ -6,10 +6,10 @@
 
 # The Clerk
 
-**Beta 0.5.0. Requires Godspeed Mission Control 2.0.0-beta.6 or newer.**
+**Beta 0.5.1. Requires Godspeed Mission Control 2.0.0-beta.6 or newer.**
 
-**You scan a letter with your phone. Minutes later it has a real name, it sits in the right folder
-of your own Google Drive, and your mission control can tell you what it says.**
+**You scan a letter with your phone. Minutes later it has a real name in Paperless, and your
+mission control can tell you what it says. Google Drive copies are optional.**
 
 An add-on for [Godspeed Mission Control](https://github.com/MichaelZelbel/godspeed-mission-control),
 the free personal AI you run yourself. The manual for Godspeed is the book
@@ -20,20 +20,20 @@ the free personal AI you run yourself. The manual for Godspeed is the book
 > **You:** what did the water company want from me last month?
 >
 > **Your mission control:** Brightwater Utilities sent an invoice on 12 October: 48.30 EUR for
-> September, to pay by 20 November. It is in your drive under Invoices/Brightwater Utilities, and
+> September, to pay by 20 November. You can open it in Paperless, and
 > the 20 November is in your deadlines.
 
 Underneath, the Clerk uses [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx), a free
 program that reads the text of every scan and keeps your papers searchable. You never have to learn
-it: the Clerk installs it on your Godspeed server, secures it, keeps it running, updates it, and
-copies it to your drive every night.
+it: the Clerk installs it on your Godspeed server, secures it and keeps it running. With Google
+Drive connected, it makes a nightly restore copy and updates Paperless after a fresh copy.
 
 ## This is for you if
 
 You have paper: invoices, tax notices, insurance letters, pay slips, letters with a deadline. You
 want each one scanned once and then found again in the folder you would have put it in yourself,
 without sorting anything by hand. You have Godspeed Mission Control on a server (or a Paperless
-you already run), and a Google Drive.
+you already run). You can add Google Drive for filed copies and a restore copy.
 
 If you do not have Godspeed yet, start with [the install page](https://godspeedmissioncontrol.com/install)
 and Chapter 2 of the book.
@@ -42,17 +42,17 @@ and Chapter 2 of the book.
 
 - **Reads and names** every scan: a real title, the sender, the kind of paper, tags, and the date
   printed on it (not the day you scanned it).
-- **Files it** into the folder of your own Google Drive where it belongs, named
+- **With Google Drive, files it** into the folder of your own Google Drive where it belongs, named
   `<date> <title>.pdf`, the way you already keep your papers. Within ten minutes of a scan there is
   a copy in your drive, sorted or not.
 - **Tells Godspeed**: every paper gets a note in your notebook with its full text, a short summary
   and the key facts, so you can ask about it. A "Documents" list shows everything it handled.
 - **Turns a letter's deadline into a Godspeed deadline**, which reminds you as the day comes.
-- **Asks you only what it cannot decide**: a paper it cannot place waits on a "To sort" page in
-  Paperless, with a picture of its first page; you pick the folder, and your drive follows.
+- **Asks you only what it cannot decide**: unsure papers carry "Check this" in Paperless. With
+  a Drive plan, its "To sort" page shows papers needing a folder; your Drive follows your pick.
 - **Keeps Paperless running and safe**: the HTTPS address with a second login factor, updates only
-  to versions it was tested with (a failed update puts everything back), a restart when it stops,
-  a warning before the disk is full, and a restore copy in your drive every night.
+  to versions it was tested with after a fresh restore copy (a failed update puts everything back),
+  a restart when it stops, a warning before the disk is full, and, with Drive, a nightly restore copy.
 
 ## What it never does
 
@@ -97,8 +97,8 @@ Godspeed gets one update instruction before the Clerk changes Paperless or its s
 
 **What the server needs** (Paperless is installed only when these checks pass):
 1.5 GB of memory free, 8 GB of disk free, Docker with Compose, and the web address Godspeed's own
-installer gave it. Your papers then take their space twice on the server: once in Paperless, once
-in its nightly export for the restore copy.
+installer gave it. With Drive's nightly restore copy, papers take their space twice on the server:
+once in Paperless, once in the export.
 
 **Papers in another language** are read in that language and English, and the starter set of
 document types and tags comes in the language you talk to Godspeed in (`--chat-language`, the same
@@ -110,52 +110,58 @@ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-clerk/main/i
 
 ## Your first fifteen minutes
 
-1. **The line above** (about five minutes on a fresh server). It asks "Install Paperless now?"
-   (yes is the default) and the name you want to sign in with. At the end it prints your Paperless
-   address, your password and your second factor's setup key. Keep them in your password manager.
-2. **Google Drive.** The Clerk files with a Google app of your own, so no one else's app holds a
-   key to your drive; [docs/google-drive.md](docs/google-drive.md) makes one in five minutes. Then:
+1. **The install line above.** Keep the Paperless address, password and second factor setup key
+   in your password manager.
+2. **Start the Clerk:** `godspeed-clerk resume`.
+3. **Your phone:** `godspeed-clerk phone` gives the iPhone app, address, login and authenticator
+   steps. Scan a letter; the Clerk confirms when the first scan arrives.
+4. **Check:** `godspeed-clerk status`. Your papers are named and sorted in Paperless, with notes
+   in Godspeed's notebook, its Documents list and any deadlines. Unsure papers carry "Check this"
+   in Paperless. You need no Google app or folder plan for this.
 
-   ```
-   godspeed-clerk drive connect --client-file <the app's JSON>
-   godspeed-clerk drive finish "<the address your browser showed after Allow>"
-   ```
+Without Drive, Paperless on your server holds the papers. **The Clerk makes no off-server backup
+without Drive.** Back up that server yourself. Monitoring and restarts continue, but automatic
+Paperless updates wait for a fresh restore copy.
 
-3. **Your documents folder and the plan.** Name the folder you keep your papers in. The Clerk
-   reads the folder names in it and proposes where each kind of paper goes, plus one "To sort"
-   folder. Say yes, or correct it in plain words to your mission control.
+## Optional: copies in Google Drive
 
-   ```
-   godspeed-clerk drive folder "Paperwork"
-   godspeed-clerk plan propose
-   godspeed-clerk plan confirm
-   godspeed-clerk resume
-   ```
+Add this now or later. The Clerk uses a Google app of your own;
+[docs/google-drive.md](docs/google-drive.md) shows how to make one. Then:
 
-4. **Your phone.** `godspeed-clerk phone` says it again, in four steps: the free app
-   Swift Paperless from the App Store on your iPhone, your
-   Paperless address, your login, and the six-digit code from your authenticator app. Scan a letter;
-   the Clerk tells you when your first scan has arrived.
+```
+godspeed-clerk drive connect --client-file <the app's JSON>
+godspeed-clerk drive finish "<the address your browser showed after Allow>"
+godspeed-clerk drive folder "Paperwork"
+godspeed-clerk plan propose
+godspeed-clerk plan confirm
+```
 
-From then on you scan, and the Clerk does the rest. "How far is the pile?" works any time:
-`godspeed-clerk status`.
+Name your own documents folder and confirm only a plan you want. An active Clerk picks up
+existing papers on its next run, adds their Drive copies, and updates the same notes and list
+items with Drive links. It keeps the same deadlines. If paused, run `godspeed-clerk resume`.
+The confirmed plan also supplies Paperless's folder storage paths and its "To sort" page.
+A temporary loss of a connected Drive keeps its copies waiting; it does not switch to the
+never-connected path or remove existing files.
+To stop using Drive intentionally, run `godspeed-clerk drive disconnect`. Sorting, notes and
+deadlines continue in Paperless; old Drive files and links remain, but no new off-server copy is
+made. Connecting Drive again resumes copying with the existing plan.
 
 ## Where your papers live
 
-- **Your drive** is their home: each one, named and sorted, in your own folders. This is the copy
-  that matters, and it is there within ten minutes of a scan.
-- **The server** is the workplace: Paperless keeps every paper so the phone app can show and search
-  them all.
-- **The restore copy**: in a folder "The Clerk" in your drive, Paperless's complete export (every
-  file, title, tag and date) and the Clerk's own records; the first one right after you resume the
-  Clerk, then every night. Only what changed is uploaded, and it counts as whole only when every
-  file in the drive is what the export says.
-- **What can still be lost**: a paper scanned in the minutes before a server fails, before its
-  copy reached your drive. Keep a paper until it shows "in drive" in your Documents list.
+- **Paperless on your server** keeps every paper, so the phone app can show and search it.
+- **Godspeed's notebook** holds the notes, Documents list and deadlines, with links to Paperless.
+- **With Google Drive connected**, every paper gets a named copy in your own documents folder,
+  within ten minutes of text reading, sorted or not. Keep the original paper until its Documents
+  item says "in drive". A scan not yet copied can be lost with the server.
+- **With Drive, on a Paperless the Clerk installed**, the first restore copy starts after resume,
+  then runs nightly: Paperless's complete export plus the Clerk's records. On a Paperless you
+  already run, the Clerk copies only its own records; Paperless's backup stays your responsibility.
+- **Without Drive**, the Clerk has no off-server copy of the papers or restore copy. Losing the
+  server can lose the papers. Keep your own backup.
 
 ## A new server
 
-When a server is gone, run the install line on the new one (it installs an empty Paperless) and
+With an existing Drive restore copy, when a server is gone, run the install line on the new one (it installs an empty Paperless) and
 connect the same Google Drive, with the same Google app as before. The Clerk finds its restore copy
 and says so. Rebuild before you name a documents folder or confirm a plan (the copy brings the plan
 back with it):
@@ -179,7 +185,7 @@ folder of its own, so a new server never writes over the copy of the old one;
 A Paperless where another account keeps papers too is never copied this way (its export would hold
 their papers); the Clerk tells you once that a shared Paperless needs a backup its owners agree on.
 A Paperless the Clerk did not install keeps its owner's backup; your own papers are safe in your
-drive anyway.
+drive when Drive is connected.
 
 ## Keeping it running
 
@@ -189,7 +195,7 @@ On a Paperless it installed, the Clerk:
   an update it keeps a copy of Paperless's database, its settings and the version it ran; when the
   new version does not come up healthy, it puts all of that back and tells you once. An update cut
   off half way (a reboot) is finished or undone at the Clerk's next look. Now:
-  `godspeed-clerk paperless update`.
+  `godspeed-clerk paperless update`. Without Drive, automatic updates wait for a fresh restore copy.
 - **restarts** Paperless when it stops, and tells you if that does not help within half an hour.
 - **warns** before the disk is full.
 - **keeps the address**: when an update of Godspeed rewrites the web settings, the Clerk puts
@@ -249,7 +255,7 @@ the day can be, and you are asked to check it. Once you change or close a deadli
   <year>" tags and its "Check this" and "Important" tags; with your yes, the storage paths that
   mirror your folders and the "To sort" page. On a Paperless it installed, also the starter set,
   your account, the second factor, updates and the nightly export.
-- **Google Drive**: your whole drive is the only permission that can file into folders you already
+- **Optional Google Drive**: your whole drive is the only permission that can file into folders you already
   have; the Clerk itself reads and writes only inside your documents folder and its own folder
   "The Clerk", changes only files it made, and never deletes one.
   [docs/google-drive.md](docs/google-drive.md).
@@ -281,6 +287,8 @@ language of your papers. Every word in notes and messages is a setting (`texts`)
 sets them once in your language; `godspeed-clerk settings reset texts` brings back the English ones.
 
 ## Honest limits
+
+- Google Drive is optional. Without it there is no Clerk off-server backup; you must keep your own.
 
 - Installing Paperless is supported on a Linux Godspeed server, using the public Docker or native
   installer, with Godspeed Mission Control 2.0.0-beta.6 or newer. Run the Clerk line on the server's

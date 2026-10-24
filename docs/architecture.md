@@ -10,6 +10,7 @@ file each, found by the registry). The work lives in `lib/core/`:
 | `model.mjs` | Godspeed's `godspeed-model`, and the check that the provider was approved. |
 | `docker.mjs` | The public Docker installation marker, its private notebook relay and verified assistant home. |
 | `drive.mjs` | Google Drive v3, and `Confined`, the only way to write to it. |
+| `drive-mode.mjs` | Distinguishes a fresh Paperless-only installation from previous Drive use or lost credentials. |
 | `oauth.mjs` | Google sign-in with PKCE, that also works on a server without a browser. |
 | `plan.mjs` | The folder plan: proposing it from your folders, the rules, file names. |
 | `pipeline.mjs` | The steps of one document: first copy, sorting, filing. |
@@ -50,11 +51,12 @@ The Paperless the Clerk installs lives in `lib/install/`:
 1. Read the account (`ui_settings/`), the tags, senders, types and storage paths, and the list of
    documents the account owns (light fields only, oldest first). With the person's yes, keep
    Paperless's storage paths and the "To sort" page level with the folder plan (F19).
-2. First copies: each document without one gets the searchable PDF uploaded into "To sort" as
+2. With a connected Drive and confirmed plan, first copies: each document without one gets the searchable PDF uploaded into "To sort" as
    `<upload day> <title>.pdf`, with the mark, and the size and checksum Google reports are compared
    with Paperless's own. Up to `copy_batch` per run.
-3. Sorting, when Godspeed sorts: each document that still carries the inbox tag and has its first
-   copy is read by the AI and sorted. Up to `batch_size` per run.
+3. Sorting, when Godspeed sorts: each document that still carries the inbox tag is read by the AI
+   and sorted. With Drive open, its first copy comes first. Without Drive, Paperless holds the
+   original and supplies its checksum through the metadata API. Up to `batch_size` per run.
 4. Filing: each document that is sorted (or, when Paperless or nobody sorts, no longer in the inbox
    or older than `settle_minutes`) is renamed to `<date> <title>.pdf` and moved into the folder the
    plan gives it, or into the folder its storage path stands for when the person (or Paperless's
@@ -62,7 +64,8 @@ The Paperless the Clerk installs lives in `lib/install/`:
    When Godspeed sorts, each paper then carries its folder's storage path ("To sort" while it
    waits).
 5. Documents gone from Paperless: their files stay; the person hears it once.
-6. Notes and the collection, for every document that is filed: its note, then its item, at most
+6. Notes and the collection, for every document that is filed, or sorted in a
+   Paperless-only installation: its note, then its item, at most
    `note_batch` (50) per run. A note is written again only when what it is made from changed.
    When the notebook does not answer, this part waits; after `notebook_down_hours` the person
    hears it once.
@@ -78,6 +81,19 @@ The worker does one run every `interval_minutes` (3), and a run starts no new do
 `run_minutes` (5), so a new scan has its first copy within about ten minutes. Before each run (also
 while paused) it keeps a Paperless the Clerk installed running; after each run (while active) it
 makes the nightly restore copy when it is due, and the update after it.
+
+Google Drive is optional for a fresh user: install, resume, phone, scan. Without a connection or
+plan, sorting, notes, Documents items and deadlines use Paperless links. No Drive folder or
+storage-path mirror is invented. The checksum produces the same note/item/deadline identities
+when Drive is connected later; filing updates links and placement on those records. Previous
+Drive credentials, plans or copy records retain the Drive path when access fails or credentials
+are removed, preserving its first-copy and filing safeguards.
+The explicit `drive disconnect` command instead records its existing `disconnected_at` marker,
+allowing Paperless-only work while retaining old copies, links and plans for reconnection.
+
+Without Drive there is no Clerk off-server backup or nightly export. The existing fresh-restore
+gate holds automatic managed Paperless updates; disk, restart and HTTPS monitoring continue.
+A Paperless the Clerk did not install stays entirely under its owner's backup/update care.
 
 ## Picking up where it stopped
 

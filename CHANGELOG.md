@@ -1,5 +1,18 @@
 # Changes
 
+## 0.5.1 beta
+
+- Google Drive is optional. Resume after installation and scan into Paperless; sorting, notebook
+  notes, the Documents list and letter deadlines work with Paperless links, without a Google app
+  or folder plan.
+- Connect Drive later with the usual consent and confirmed folder plan. Existing papers gain
+  filed copies and Drive links on the same notes, items and deadlines. Previously connected Drive
+  failures keep their existing safeguards and are reported separately.
+- Explicit `drive disconnect` also lets new scans continue in Paperless, keeping old Drive files,
+  links and the plan for a later reconnection.
+- Setup and status explain that there is no off-server backup without Drive. Managed Paperless
+  monitoring continues, while automatic updates still require a fresh restore copy.
+
 ## 0.5.0 beta (Godspeed Mission Control 2.0.0-beta.6 or newer)
 
 - The same install line now supports the public Docker server and the native Linux server.

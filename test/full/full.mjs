@@ -249,7 +249,7 @@ async function connectDrive(state, fake) {
   const landed = (await fetch(link, { redirect: "manual" })).headers.get("location");
   await must(state, ["drive", "finish", landed], env);
 }
-async function setUp(mode, fake, storagePaths = null) {
+async function setUp(mode, fake, storagePaths = null, withoutDrive = false) {
   const state = tmp(mode);
   const env = fake.env;
   await must(state, ["setup", "--paperless", PL, "--user", "alex", "--godspeed", WS, "--no-service", "--no-copy", "--sorting", mode, "--country", KIT.country], env);
@@ -258,10 +258,13 @@ async function setUp(mode, fake, storagePaths = null) {
   await must(state, ["settings", "settle_minutes", "0"], env);
   await must(state, ["settings", "talk", JSON.stringify(["telegram"])], env);
   if (TG) await must(state, ["settings", "telegram_env", TG.env], env);
-  await connectDrive(state, fake);
-  await must(state, ["drive", "folder", "Paperwork"], env);
-  const p = await must(state, ["plan", "propose"], env);
-  const confirmed = await must(state, ["plan", "confirm", ...(storagePaths ? ["--storage-paths", storagePaths] : [])], env);
+  let p = { out: "" }, confirmed = { out: "" };
+  if (!withoutDrive) {
+    await connectDrive(state, fake);
+    await must(state, ["drive", "folder", "Paperwork"], env);
+    p = await must(state, ["plan", "propose"], env);
+    confirmed = await must(state, ["plan", "confirm", ...(storagePaths ? ["--storage-paths", storagePaths] : [])], env);
+  }
   await must(state, ["resume"], env);
   return { state, env, proposal: p.out, confirmed: confirmed.out };
 }
@@ -286,6 +289,35 @@ async function main() {
   check(first.title === `Scan ${today} 16-17-01` && first.created === today && first.tags.includes(tagIds.Inbox), "an upload arrives like a phone scan: file-name title, upload day as its date, inbox tag");
   check((first.content || "").includes("55120"), "Paperless read the text of the scan");
   const samDoc = JSON.stringify(await api(samTok, "GET", `documents/${ids["second-account-letter"]}/`));
+
+  if (CHECKOUT) {
+    section("Optional Drive: real Paperless and notebook first, the same records after connecting Drive");
+    const fake = await startFakeDrive({ tree: KIT.drive.tree, account: KIT.drive.account });
+    NB = await startNotebook(); TG = await startTelegram();
+    try {
+      const before = await snapshot();
+      // Read-only sorting keeps the original kit intact for the existing acceptance stories.
+      // The public-server journey separately proves default AI sorting before Drive is connected.
+      const { state, env } = await setUp("nobody", fake, null, true);
+      fs.writeFileSync(path.join(state,"state.json"), JSON.stringify({started_at:"2026-10-01T00:00:00Z"}));
+      await runUntilQuiet(state, env);
+      const here = ALEX.filter(s=>!HELD_BACK.includes(s));
+      const notes = await NB.notes(), items = await NB.items(), due = await NB.deadlines();
+      const sameIds = rows => rows.map(r=>r.id || r.key || r.slug).sort().join("\n");
+      check(!fs.existsSync(path.join(state,"drive.json")) && !fs.existsSync(path.join(state,"plan.json")) && fake.writes.length===0,"without a Google app or plan, no Drive request or copy is needed");
+      check(notes.length===here.filter(s=>!expected(s).not_in_notebook).length && items.length===here.length && due.length===wantDeadlines(here),"real notebook notes, Documents items and deadlines work without Drive");
+      check(notes.every(n=>n.skip_processing===true && n.content.includes("/documents/") && !n.content.includes("drive.google.com")),"notes use Paperless links and skip AI reprocessing without Drive");
+      check(await snapshot()===before,"without Drive, nobody-sorts still never writes Paperless");
+      await connectDrive(state,fake);
+      await must(state,["drive","folder","Paperwork"],env);
+      await must(state,["plan","propose"],env);
+      await must(state,["plan","confirm","--storage-paths","no"],env);
+      await runUntilQuiet(state,env);
+      check(here.every(s=>oneFile(fake,s).length===1),"connecting Drive later files every existing paper once");
+      check(sameIds(await NB.notes())===sameIds(notes) && sameIds(await NB.items())===sameIds(items) && sameIds(await NB.deadlines())===sameIds(due),"later Drive preserves the same real note, item and deadline identities");
+      check((await NB.notes()).every(n=>n.content.includes("drive.google.com")),"the existing real notebook notes gain Drive links");
+    } finally { await fake.close(); await NB.stop(); await TG.close(); NB=null; TG=null; }
+  }
 
   for (const mode of ["nobody", "paperless"]) {
     section(`F4: "${mode === "nobody" ? "nobody sorts" : "Paperless sorts"}"`);

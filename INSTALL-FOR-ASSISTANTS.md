@@ -66,7 +66,17 @@ Read what it prints:
   recovery codes. Hand them over in the chat exactly as printed, and say: keep them in your password
   manager. Nothing else in the output needs them.
 
-## 3. Google Drive, the documents folder, the plan
+## 3. Start without Google Drive
+
+Run `godspeed-clerk resume`, then `godspeed-clerk phone`. A new user can scan now: sorting,
+notebook notes, the Documents list and deadlines work through Paperless links without a Google
+app or plan. Say clearly that papers stay on the server and the Clerk makes no off-server backup
+without Drive. Managed Paperless monitoring/restarts continue; automatic updates wait for a
+fresh restore copy. Keep an existing update's active/paused state as it was.
+
+## Optional: Google Drive, the documents folder, the plan
+
+Offer Drive for filed copies and a restore copy; do not make it a prerequisite for scanning.
 
 1. They need their own Google app ([docs/google-drive.md](docs/google-drive.md)); help them make it
    if they have none. Then `godspeed-clerk drive connect --client-file <the JSON>` prints a link.
@@ -79,7 +89,8 @@ Read what it prints:
 3. Ask which folder holds their papers, then `godspeed-clerk drive folder "<its name or link>"`.
 4. `godspeed-clerk plan propose` prints the plan in plain words. Show it to them as it is. They say
    yes, or what to change; `godspeed-clerk plan confirm` only after their yes.
-5. `godspeed-clerk resume`.
+5. An active Clerk picks up existing papers next run, updating the same notebook records and deadlines.
+   Resume only if paused: `godspeed-clerk resume`.
 
 ## 4. The phone
 
@@ -93,6 +104,6 @@ saved the login: `godspeed-clerk phone --forget`.
 godspeed-clerk status
 ```
 
-Tell them in two or three sentences: where Paperless runs, that a first copy of every scan is in
-their drive within ten minutes, and that a paper the Clerk cannot place waits on the "To sort"
-page, where they pick its folder.
+Tell them where Paperless runs and that Godspeed can read the notes and deadlines. Without Drive,
+say there is no off-server backup and unsure papers carry "Check this". With Drive and its plan,
+say copies go into their documents folder and the "To sort" page holds papers needing a folder.

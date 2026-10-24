@@ -1,10 +1,18 @@
 # Fresh public-server install review
 
-This is the single release review runbook for Clerk 0.5.0 and public Godspeed Mission Control
+This is the public-server review runbook for Clerk 0.5.1 and public Godspeed Mission Control
 2.0.0-beta.6. Read the Clerk README as a new user and follow its order. These helpers provide
 made-up outside services and local certificates; they do not replace Godspeed, its notebook,
 its model command or Paperless. Report a verdict for both server types, including any install
 step that needs information the README does not give.
+
+For the bounded 0.5.1 optional-Drive review, the author runs Docker first and the independent
+reviewer runs one fresh native server separately. Use the native commands below with a new name
+and IP, and append `--optional-drive` to the final `phone.mjs` command. That path resumes and
+uploads without a Google app or plan, checks real sorting/notes/items/deadlines using Paperless
+links and the no-backup status, then connects Drive normally. It verifies one filed copy and the
+same note/item IDs and deadline keys/slugs, now with Drive links. The default helper invocation
+retains the original Drive-first journey for existing connected users.
 
 Use the existing `clerk-machines` WSL bed on K, `clerk-machine:24.04` stock Ubuntu/systemd/Docker
 image and `clerk-net` network. Do not run `test/machine/machine.sh up`: that older test installs a
