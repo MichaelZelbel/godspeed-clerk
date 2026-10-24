@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import http from "node:http";
 import net from "node:net";
 import { startFakeDrive } from "../fakes/drive.mjs";
+import { installedVersion } from "../helpers.mjs";
 import { keyOf } from "../../lib/core/deadlines.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -209,6 +210,8 @@ fs.copyFileSync(path.join(KITDIR, "answers.json"), ANSWERS);
 const WS = path.join(WORK, "godspeed");
 fs.mkdirSync(WS);
 fs.writeFileSync(path.join(WS, "AGENTS.md"), "A made-up Godspeed folder for the full test.\n");
+// Match the real notebook under test; the isolated model workspace also needs its version receipt.
+installedVersion(WS, CHECKOUT ? JSON.parse(fs.readFileSync(path.join(CHECKOUT, "notebook", "package.json"), "utf8")).version : "2.0.0-beta.6");
 
 function clerk(state, args, env = {}, app = ROOT) {
   return new Promise((resolve) => {
