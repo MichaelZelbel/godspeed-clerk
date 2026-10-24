@@ -105,8 +105,9 @@ the selected provider or attempts a request. This is distinct from an unconfigur
 
 ## Brief for the next release attempt
 
-1. Release the Godspeed product fixes first: a private Docker notebook door and support for the
-   current native Hermes runtime layout. Preparing product pull requests does not release Godspeed.
+1. Wait for a separately authorized Godspeed release containing a private Docker notebook door
+   and support for the current native Hermes runtime layout. This Clerk prompt does not authorize
+   releasing Godspeed; preparing product pull requests does not release it.
 2. Walk both public installs again against the actual release that contains those fixes.
 3. In Clerk, add the minimum Godspeed version check before any Paperless or service changes.
    Reject unsupported Docker versions before the generic missing Node or Caddy messages.
@@ -118,8 +119,10 @@ the selected provider or attempts a request. This is distinct from an unconfigur
    earlier import and site in the same successful migration.
 6. Only after both fresh paths pass, upload an invented letter the way the phone app does,
    prove it is sorted and filed in a test drive, and run the one independent README review.
-7. Audit every new commit, then publish 0.5.0, the guide and the production update within the
-   original approval. No release or update has been made by this walkthrough.
+7. After that separately authorized host release and the passing walkthroughs, audit every new
+   commit. The original Clerk approval covers publishing only Clerk 0.5.0, its guide and the
+   installed Clerk update. It does not cover releasing Godspeed. No release or update has been
+   made by this walkthrough.
 
 Do not build Docker support against an unreleased, assumed product contract. Do not add a new
 AI route or change the user's provider. A native-only release has not been approved, and the
