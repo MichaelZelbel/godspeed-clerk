@@ -32,8 +32,8 @@
   from "Paperless sorts" it made a second one.
 - What the independent review found, fixed before release: a new server's first copy wrote over
   the restore copy of the old one (each installation now writes into folders of its own id, a
-  rebuild takes the old id over, and a plan confirmed on a new empty Paperless while a copy waits is
-  stopped with the way to rebuild); an update cut off half way, or during its rollback, left the
+  rebuilt server too, and a plan confirmed on a new Paperless while a copy waits is stopped with the
+  way to rebuild, also when a few scans arrived first); an update cut off half way, or during its rollback, left the
   Clerk wrong about the version and the copy unrestorable (the update keeps a journal and is
   finished or undone at the next look; the copy is labelled from the export's own metadata; only
   true messages); a rebuild cut off half way could not be finished (it keeps a journal too); a file
@@ -43,6 +43,17 @@
   installation's login was handed out and the thumbnails were gone; a forced copy could finish an
   old export; a copy that kept failing was never told; a connection Google dropped during the export
   failed the copy; a shared Paperless was never updated; the update ran in daytime.
+- What the second review round found, fixed: a rebuild cut off during the import was taken as
+  finished with papers lacking their files, search index or thumbnails (finishing now checks every
+  paper's files against its checksum and imports again when one is missing, and always makes the
+  search index and thumbnails); `status` called every installed Paperless "being installed"; update
+  messages were not checked against the version that runs, and piled up (now said once, and only
+  while true); an update cut off before the new version started was remembered as failed and never
+  tried again (it is simply due again); a failed update and a failing copy now say what to do,
+  without error insides; a deleted export folder made every copy fail until Paperless was restarted
+  (the folder is made again and Paperless started afresh); `restore --check` on the server that made
+  a copy did not list it; the install line during a cut-off rebuild ended with the first steps; a
+  scan read during an update's health check could undo the update.
 - The systemd service reads extra settings from `service.env` in the state folder.
 - install.sh finds the Node.js Godspeed's own installer keeps in the Godspeed folder, and takes the
   Clerk from `GODSPEED_CLERK_TARBALL` when given; install.ps1 for Windows; INSTALL-FOR-ASSISTANTS.md.

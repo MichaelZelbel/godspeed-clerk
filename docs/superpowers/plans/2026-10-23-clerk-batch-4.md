@@ -70,3 +70,10 @@
   test-first: copy folders per installation, journals for updates and rebuilds, every file checked
   against the export's manifest. The machine test then found that Paperless 3 keeps SHA-256
   checksums where the tests had MD5 ones.
+- Round 2 (verdict no, one finding blocking): a rebuild cut off while the importer ran was "finished"
+  on the row count alone, without search index, thumbnails or (on a big archive) files. Finishing now
+  checks each paper's files against its checksum, imports again if one is missing, and always makes
+  the index and thumbnails. Also fixed: a rebuilt server writing into the old server's copy folder
+  (an old server still running overwrote it), the status line of every installed Paperless, update
+  messages said while no longer true, a cut-off update that changed nothing never tried again, a
+  deleted export folder, the plan guard silenced by one scan, and four smaller ones.

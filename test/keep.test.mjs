@@ -102,6 +102,8 @@ test("the new messages: each in plain words, once, while still true", async () =
   const w = await kitWorld({ only: ["utility-invoice"] });
   try {
     await w.runUntilQuiet();
+    // The update message is true only while Paperless still runs the version it went back to.
+    writeJson(w.paths.installed, { dir: os.tmpdir(), project: "x", port: 8010, version: "3.2.1", stage: "done", user: "alex", host: "srv1.example.test", https_port: 48444, address: "https://srv1.example.test:48444" });
     const st = readJson(w.paths.state);
     st.host = { disk_low_since: "2026-10-23T03:00:00.000Z" };
     st.copy = { shared_since: "2026-10-23T02:30:00.000Z" };
@@ -133,5 +135,21 @@ test("REVIEW 2: the keep-running step finishes an update that was cut off, and t
   const r = await w.step();
   assert.equal(r.recovered.outcome, "old");
   assert.equal(readJson(w.ctxPaths.installed).update, undefined, "the journal is cleared");
-  assert.deepEqual(w.out.map((n) => [n.kind, n.rolled_back]), [["update-failed", true]], "told: it runs the old version, as before");
+  assert.ok(w.calls.some((c) => / up -d/.test(c)), "the old version is started again");
+  assert.deepEqual(w.out, [], "cut off before the new version started: nothing changed, nothing to tell (round 2)");
+  // Cut off after the new version started: that is a real failed update, and it is told.
+  const s = keepWorld();
+  const rs = readJson(s.ctxPaths.installed);
+  fs.writeFileSync(path.join(rs.dir, "compose.yaml"), "services:\n  webserver:\n    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:new\n");
+  const copy = path.join(rs.dir, "backups", "before-3.3.3");
+  fs.mkdirSync(copy, { recursive: true });
+  fs.writeFileSync(path.join(copy, "compose.yaml"), "services:\n  webserver:\n    image: ghcr.io/paperless-ngx/paperless-ngx:3.2.1@sha256:old\n");
+  fs.writeFileSync(path.join(copy, "paperless.env"), "PAPERLESS_URL=https://srv1.example.test:48444\n");
+  writeJson(s.ctxPaths.installed, { ...rs, version: "3.2.1", update: { to: "3.3.3", from: "3.2.1", image_from: "ghcr.io/paperless-ngx/paperless-ngx:3.2.1@sha256:old", image_to: "ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:new", backup: copy, docs: 0, stage: "started" } });
+  s.up = false;
+  // Every look at Paperless takes eleven minutes here, so neither version answers in time.
+  const slow = async () => { s.advance(11); return new Response("{}", { status: 401 }); };
+  const r2 = await s.step({ fetchImpl: slow });
+  assert.equal(r2.recovered.outcome, "old");
+  assert.deepEqual(s.out.map((n) => n.kind), ["update-failed"], "told once");
 });

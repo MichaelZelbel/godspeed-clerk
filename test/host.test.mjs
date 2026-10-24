@@ -136,6 +136,7 @@ test("REVIEW 2: killed after the new version started and migrated: the next look
   w.host.setImage(imageFor("3.3.3")); w.host.up();
   const r = await w.host.recover({ token: "t" });
   assert.equal(r.outcome, "new");
+  assert.ok(!r.untouched, "the new version had started");
   assert.equal(w.rec.version, "3.3.3");
   assert.equal(w.rec.update, undefined);
 });
@@ -164,6 +165,7 @@ test("REVIEW 2: killed after the copy, before the new version: the old version r
   const r = await w.host.recover({ token: "t" });
   assert.equal(r.ok, false);
   assert.equal(r.rolledBack, true);
+  assert.equal(r.untouched, true, "the new version never started: nothing changed but a stop (round 2)");
   assert.equal(w.st.version, "3.2.1");
   assert.equal(w.rec.update, undefined);
   const s = journalWorld();
@@ -171,6 +173,7 @@ test("REVIEW 2: killed after the copy, before the new version: the old version r
   s.host.stop();
   const r2 = await s.host.recover({ token: "t" });
   assert.equal(r2.outcome, "old");
+  assert.equal(r2.untouched, true);
   assert.equal(s.st.running, true);
   assert.equal(s.rec.update, undefined);
 });

@@ -182,7 +182,9 @@ test("F9: a rebuild goes only into an empty Paperless the Clerk installed; one t
     writeJson(w.paths.installed, { dir, project: "godspeed-clerk-paperless", port: 8010, version: "3.3.3", stage: "done", user: "alex" });
     const calls = [];
     const run = (cmd, args) => { calls.push([cmd, ...args].join(" ")); return { status: 0, stdout: "CLERK {\"alex\": 3}\n", stderr: "" }; };
-    const r = await rebuild(w.context(), { run });
+    // Paperless answers (signed out), as a running one does.
+    const fetchImpl = async () => new Response("{}", { status: 401 });
+    const r = await rebuild(w.context(), { run, fetchImpl });
     assert.equal(r.ok, false);
     assert.match(r.why, /already holds 3 document/);
     assert.ok(!calls.some((c) => /down|rm -rf|importer/.test(c)), calls.join("\n"));

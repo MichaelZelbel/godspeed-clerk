@@ -50,12 +50,14 @@ async function world() {
   fs.writeFileSync(path.join(pdir, "compose.yaml"), "services:\n  webserver:\n    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:x\n");
   writeJson(b.installed, { dir: pdir, project: "godspeed-clerk-paperless", port: 8010, version: "3.3.3", image: "ghcr.io/paperless-ngx/paperless-ngx:3.3.3@sha256:x", stage: "done", user: "me", host: "srv-b.example.test", https_port: 48444, address: "https://srv-b.example.test:48444" });
   writeJson(b.login, { user: "me", password: "aaaa-bbbb-cccc-dddd-eeee", secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", recovery: ["1"] });
-  const pd = { docs: 0, calls: [], importFails: false };
+  const pd = { docs: 0, calls: [], importFails: false, filesBad: [] };
   const run = (cmd, args, { input } = {}) => {
     const line = [cmd, ...args].join(" ");
     pd.calls.push(line.replace(pdir, "<dir>"));
     if (/manage\.py shell/.test(line)) {
       if (/owner__username/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify(pd.docs ? { kim: pd.docs } : {})}\n` };
+      if (/source_path/.test(line)) return { status: 0, stdout: `CLERK ${JSON.stringify({ n: pd.docs, bad: pd.filesBad })}
+` };
       if (/Token\.objects/.test(line)) return /^kim\n/.test(input || "") && pd.docs ? { status: 0, stdout: 'CLERK {"token":"tok-b","id":2}\n' } : { status: 1, stdout: "", stderr: "User matching query does not exist" };
     }
     if (/document_importer/.test(line)) { if (pd.importFails) return { status: 1, stdout: "", stderr: "the import broke" }; pd.docs = 3; }
@@ -94,8 +96,8 @@ test("F9: a rebuild brings the papers back, the Clerk's records, a fresh connect
     assert.equal(login.user, "kim");
     assert.equal(login.password, undefined, "REVIEW 5: the empty installation's password is not handed out any more");
     assert.equal(login.secret, undefined);
-    assert.ok(fs.existsSync(path.join(x.b.records, "1.json")) || readJson(x.b.settings).copy_id, "the Clerk's records are back");
-    assert.equal(readJson(x.b.settings).copy_id, readJson(x.w.paths.settings).copy_id, "it goes on in the old server's copy folder");
+    assert.deepEqual(readJson(x.b.plan), readJson(x.w.paths.plan), "the Clerk's records of that night are back (its plan)");
+    assert.notEqual(readJson(x.b.settings).copy_id, readJson(x.w.paths.settings).copy_id, "a copy folder of its own, never the old server's (REVIEW B)");
   } finally { await x.close(); }
 });
 
@@ -136,10 +138,53 @@ test("REVIEW 1: confirming a plan on a new, empty Paperless while the drive hold
   const found = { restore: { made_at: "2026-10-23T22:28:50.000Z", documents: 7 } };
   const rec = { stage: "done" };
   assert.match(freshStartWarning({ rec, plan: { status: "proposed" }, count: 0, found }), /restore copy.*7 papers.*godspeed-clerk restore.*--start-fresh/s);
-  assert.equal(freshStartWarning({ rec, plan: { status: "proposed" }, count: 2, found }), null, "this Paperless has papers: not a new one");
+  assert.match(freshStartWarning({ rec, plan: { status: "proposed" }, count: 2, found }), /already holds 2 paper/, "a few scans made here do not silence it (round 2)");
   assert.equal(freshStartWarning({ rec: { ...rec, rebuilt_from: "x" }, plan: { status: "proposed" }, count: 0, found }), null, "rebuilt already");
   assert.equal(freshStartWarning({ rec, plan: { status: "confirmed" }, count: 0, found }), null, "a plan confirmed before");
   assert.equal(freshStartWarning({ rec: null, plan: { status: "proposed" }, count: 0, found }), null, "a Paperless the Clerk did not install");
   assert.equal(freshStartWarning({ rec, plan: { status: "proposed" }, count: 0, found: { restore: null } }), null, "no copy");
   assert.equal(freshStartWarning({ rec, plan: { status: "proposed" }, count: 0, found, startFresh: true }), null, "the person said so");
+});
+
+test("REVIEW A: finishing a rebuild cut off after the database was loaded checks the files, and imports again when some are missing", async () => {
+  const x = await world();
+  try {
+    x.pd.docs = 3;
+    x.pd.filesBad = [[2, "original"]]; // the importer was killed while it copied the files
+    const rec = readJson(x.b.installed);
+    const id = readJson(x.w.paths.settings).copy_id;
+    const restore = JSON.parse(x.w.drive.files().find((f) => x.w.drive.pathOf(f.id) === `The Clerk/paperless/${id}/restore.json`).content.toString());
+    writeJson(x.b.installed, { ...rec, rebuild: { stage: "importing", copy_id: id, made_at: restore.made_at, documents: 3, user: "kim", version: "3.3.3" } });
+    const origRun = x.run;
+    const run = (cmd, args, o) => { const r = origRun(cmd, args, o); if (/document_importer/.test(args.join(" "))) x.pd.filesBad = []; return r; };
+    const r = await rebuild(x.ctx(), { run, fetchImpl: x.fetchImpl });
+    assert.equal(r.ok, true, r.why);
+    assert.ok(x.pd.calls.some((c) => / down/.test(c)) && x.pd.calls.some((c) => /document_importer/.test(c)), "emptied and imported again");
+  } finally { await x.close(); }
+});
+
+test("REVIEW A: finishing a rebuild whose files are all there makes the search index and the thumbnails again", async () => {
+  const x = await world();
+  try {
+    x.pd.docs = 3;
+    const rec = readJson(x.b.installed);
+    const id = readJson(x.w.paths.settings).copy_id;
+    const restore = JSON.parse(x.w.drive.files().find((f) => x.w.drive.pathOf(f.id) === `The Clerk/paperless/${id}/restore.json`).content.toString());
+    writeJson(x.b.installed, { ...rec, rebuild: { stage: "imported", copy_id: id, made_at: restore.made_at, documents: 3, user: "kim", version: "3.3.3" } });
+    const r = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl });
+    assert.equal(r.ok, true, r.why);
+    assert.ok(!x.pd.calls.some((c) => /document_importer/.test(c)), "no second import");
+    assert.ok(x.pd.calls.some((c) => /document_index reindex/.test(c)), "the search index");
+    assert.ok(x.pd.calls.some((c) => /document_thumbnails/.test(c)), "the thumbnails");
+  } finally { await x.close(); }
+});
+
+test("REVIEW B: a rebuilt server writes its restore copy into a folder of its own, never the old server's", async () => {
+  const x = await world();
+  try {
+    const old = readJson(x.w.paths.settings).copy_id;
+    const r = await rebuild(x.ctx(), { run: x.run, fetchImpl: x.fetchImpl });
+    assert.equal(r.ok, true, r.why);
+    assert.notEqual(readJson(x.b.settings).copy_id, old);
+  } finally { await x.close(); }
 });
