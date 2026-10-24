@@ -386,8 +386,12 @@ async function partB() {
   const after = (await inM("b", `md5sum "${victim}"`)).out.split(" ")[0];
   check(fin2.code === 0 && /without their files; importing again/.test(fin2.out) && /Paperless is rebuilt/.test(fin2.out), "finishing it notices the half-written archive file and imports again");
   check(!!victim && after === whole, `that paper's archive file is whole again (${victim.split("/").pop()})`);
-  const sane = await inM("b", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless exec -T webserver document_sanity_checker --no-progress-bar 2>&1 | tail -3");
-  check(/No issues detected/i.test(sane.out), `Paperless's own sanity check: ${sane.out.trim().split("\n").pop()}`);
+  const sane = await inM("b", "cd /opt/godspeed-clerk/paperless && docker compose -p godspeed-clerk-paperless exec -T webserver document_sanity_checker --no-progress-bar 2>&1 | tail -6");
+  check(/No issues detected/i.test(sane.out), `Paperless's own sanity check: ${(sane.out.split("\n").find((l) => /issue/i.test(l)) || sane.out.trim().split("\n").pop()).replace(/[^\w .:,()'-]/g, "").trim()}`);
+  // (The import keeps no sign-ins: the phone signs in once more, as the restore says.)
+  const again2 = await p.signIn(A.login.user, A.login.password, A.login.secret);
+  check(again2.status === 200 && again2.body.token !== s.body.token, "the phone signs in once more with the same login");
+  s.body.token = again2.body.token;
   const ph = await clerk("b", "phone", env);
   check(!ph.out.includes("password ") || /with your Paperless password/.test(ph.out), "the phone step names the old login, not the empty installation's");
   const st = await clerk("b", "status", env);
