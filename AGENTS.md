@@ -30,3 +30,9 @@ House rules:
 - In "Paperless sorts" and "nobody sorts" not one write reaches Paperless. Never delete anything in
   Paperless, never ask Paperless for a new token.
 - Plain everyday English in everything a person reads. No em dashes and no en dashes.
+
+## Changing main
+
+Main changes only through a pull request whose `required` check passed: push a branch and open
+one, never push to main. The check waits for every other check on the pull request's commit and
+for an approving review from a reviewer listed in the repository variable `REQUIRED_REVIEWERS`.
