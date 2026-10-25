@@ -1,0 +1,93 @@
+name: required
+# The one check main requires: nothing reaches main except through a pull request whose
+# `required` check passed. That check name is what the main-branch rules name.
+#
+# Job `suite` runs the full test on every pull request (until now it ran only after a push to
+# main): a real Paperless-ngx in Docker, the made-up kit as phone scans, the Clerk against a
+# pretend Google Drive with recorded AI answers, and the gate's own self-test. A review does not
+# change the code, so a pull_request_review event skips the suite and only the gate runs again.
+#
+# Job `required` asks the two questions, each answered with one plain line, in
+# .github/workflows/required-gate.mjs (the same file as in MichaelZelbel/godspeed-mission-control,
+# where it is maintained): every other check on this commit passed, and on a pull request a
+# reviewer listed in the repository variable REQUIRED_REVIEWERS approved this commit.
+# Everything here only reads. The gate lives inside .github/workflows/ on purpose: only a key with
+# GitHub's `workflows` permission may change files there.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  pull-requests: read
+  statuses: read
+jobs:
+  suite:
+    name: suite
+    if: github.event_name != 'pull_request_review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: The Godspeed product, for its notebook
+        uses: actions/checkout@v4
+        with:
+          repository: MichaelZelbel/godspeed-mission-control
+          ref: godspeed-v2-integrated-2026-10-24-2
+          path: product
+          persist-credentials: false
+      # Beside the Clerk, not inside it: the product's CommonJS tools would otherwise take the
+      # Clerk's package.json ("type": "module") as theirs, and its notebook would not start.
+      - name: The product beside the Clerk
+        run: mv product "$RUNNER_TEMP/product"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The gate proves itself
+        run: node .github/workflows/required-gate.mjs --self-test
+      - name: Start Paperless-ngx 3.3.3
+        run: docker compose -f test/full/compose.yaml up -d
+      - name: Render the made-up kit as scans
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 test/kit/render.py test/kit/rendered
+      - name: The full test
+        run: node test/full/full.mjs
+        env:
+          PAPERLESS_URL: http://127.0.0.1:8000
+          KIT_RENDERED: test/kit/rendered
+          GODSPEED_NOTEBOOK_CHECKOUT: ${{ runner.temp }}/product
+      - name: What Paperless said, when it failed
+        if: failure()
+        run: docker compose -f test/full/compose.yaml logs --tail 200 webserver
+      - name: Stop Paperless
+        if: always()
+        run: docker compose -f test/full/compose.yaml down -v
+  required:
+    name: required
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Every other check on this commit passed, and a listed reviewer approved it
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REQUIRED_REVIEWERS: ${{ vars.REQUIRED_REVIEWERS }}
+        run: node .github/workflows/required-gate.mjs
