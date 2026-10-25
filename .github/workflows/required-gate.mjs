@@ -87,7 +87,7 @@ export async function waitForChecks({
     if (waitedMs >= limitMs) return { ...verdict, timedOut: true, waitedMs };
     const which = verdict.pending.map((run) => `${run.name} ${run.status}`).join(", ");
     log(
-      `${verdict.pending.length} not finished yet (${which}) — ` +
+      `${verdict.pending.length} not finished yet (${which}): ` +
         `${Math.round(waitedMs / 60_000)} of ${Math.round(limitMs / 60_000)} minutes gone`,
     );
     await sleep(intervalMs);
@@ -498,9 +498,9 @@ async function selfTest() {
       if (result.pass !== test.want) {
         problem =
           `it said ${result.pass ? "PASS" : "FAIL"}, not ${test.want ? "PASS" : "FAIL"}` +
-          ` — ${result.lines.join(" | ")}`;
+          `: ${result.lines.join(" | ")}`;
       } else if (!result.lines.join("\n").includes(test.says)) {
-        problem = `it never said "${test.says}" — it said: ${result.lines.join(" | ")}`;
+        problem = `it never said "${test.says}"; it said: ${result.lines.join(" | ")}`;
       } else if (test.also) {
         problem = test.also(clock);
       }
@@ -529,7 +529,7 @@ async function decide() {
   const headSha = process.env.HEAD_SHA;
   const prNumber = process.env.PR_NUMBER;
   if (!token || !repo || !headSha) {
-    console.log("required: FAIL — GITHUB_TOKEN, GITHUB_REPOSITORY and HEAD_SHA must all be set");
+    console.log("required: FAIL: GITHUB_TOKEN, GITHUB_REPOSITORY and HEAD_SHA must all be set");
     return false;
   }
   console.log(`the head commit is ${headSha} (${event || "no event"} in ${repo})`);
