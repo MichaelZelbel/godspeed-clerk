@@ -1,5 +1,10 @@
 # Changes
 
+## Unreleased
+
+- `godspeed-clerk version` and `godspeed-clerk --version` say which version is installed, and
+  `help` ends with the same line.
+
 ## 0.5.1 beta
 
 - Google Drive is optional. Resume after installation and scan into Paperless; sorting, notebook
