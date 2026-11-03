@@ -35,4 +35,6 @@ House rules:
 
 Main changes only through a pull request whose `required` check passed: push a branch and open
 one, never push to main. The check waits for every other check on the pull request's commit and
-for an approving review from a reviewer listed in the repository variable `REQUIRED_REVIEWERS`.
+for an approving review from a reviewer listed in the repository variable `REQUIRED_REVIEWERS`, or for
+Archon's review verdict on the head commit from a login in `.archon/sdlc/policy/maintainers.json` on main
+(the comment Archon's `publish-review` stamps; `.github/workflows/required-gate.mjs` says the rule).
