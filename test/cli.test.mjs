@@ -34,3 +34,14 @@ test("pause and resume switch the work off and on", async () => {
   await cli(["pause", "--state", dir]);
   assert.equal(loadSettings(statePaths(dir)).active, false);
 });
+
+test("version, --version and the last line of help all say the installed version", async () => {
+  const line = `godspeed-clerk ${JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version}`;
+  for (const argv of [["version"], ["--version"]]) {
+    const r = await cli([...argv, "--state", tmp()]);
+    assert.equal(r.code, 0);
+    assert.equal(r.out.trim(), line);
+  }
+  const h = await cli(["help", "--state", tmp()]);
+  assert.equal(h.out.trim().split("\n").at(-1), line);
+});

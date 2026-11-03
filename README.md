@@ -277,6 +277,7 @@ godspeed-clerk paperless status | update | check | password
 godspeed-clerk copy                      godspeed-clerk restore [--check]
 godspeed-clerk settings [<name> <value>] godspeed-clerk ai | ai approve
 godspeed-clerk help                      godspeed-clerk uninstall
+godspeed-clerk version | --version
 ```
 
 `uninstall` removes the program and the service; it keeps your records, every file in your drive,
