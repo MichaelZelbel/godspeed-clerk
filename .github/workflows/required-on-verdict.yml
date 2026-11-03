@@ -1,0 +1,28 @@
+name: required-on-verdict
+# Archon publishes its review verdict as a conversation comment, and a comment reruns no check by itself.
+# When a marked verdict from a login in .archon/sdlc/policy/maintainers.json lands on a pull request, the
+# failed jobs of the newest `required` run on its head are rerun, so required-gate.mjs reads the verdict.
+# This workflow runs the default branch's code (a comment event always does), never the pull request's,
+# and decides nothing about the merge.
+on:
+  issue_comment:
+    types: [created, edited]
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+jobs:
+  rerun:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '<!-- archon-review-report -->')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - name: The pull request's required check runs again for Archon's verdict
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/workflows/required-on-verdict.mjs

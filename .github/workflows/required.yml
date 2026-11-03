@@ -10,7 +10,8 @@ name: required
 # Job `required` asks the two questions, each answered with one plain line, in
 # .github/workflows/required-gate.mjs (the same file as in MichaelZelbel/godspeed-mission-control,
 # where it is maintained): every other check on this commit passed, and on a pull request a
-# reviewer listed in the repository variable REQUIRED_REVIEWERS approved this commit.
+# reviewer listed in the repository variable REQUIRED_REVIEWERS approved this commit, or Archon's
+# review verdict from a login in .archon/sdlc/policy/maintainers.json says ready for it.
 # Everything here only reads. The gate lives inside .github/workflows/ on purpose: only a key with
 # GitHub's `workflows` permission may change files there.
 on:
@@ -27,6 +28,8 @@ permissions:
   actions: read
   pull-requests: read
   statuses: read
+  # the pull request's conversation comments, where Archon publishes its review verdict
+  issues: read
 jobs:
   suite:
     name: suite
@@ -52,7 +55,9 @@ jobs:
         with:
           node-version: 22
       - name: The gate proves itself
-        run: node .github/workflows/required-gate.mjs --self-test
+        run: |
+          node .github/workflows/required-gate.mjs --self-test
+          node .github/workflows/required-on-verdict.mjs --self-test
       - name: Start Paperless-ngx 3.3.3
         run: docker compose -f test/full/compose.yaml up -d
       - name: Render the made-up kit as scans
