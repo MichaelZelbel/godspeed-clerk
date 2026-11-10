@@ -6,7 +6,7 @@
 
 # The Clerk
 
-**Beta 0.5.1. Requires Godspeed Mission Control 2.0.0-beta.6 or newer.**
+**Beta 0.5.2. Requires Godspeed Mission Control 2.0.0-beta.6 or newer.**
 
 **You scan a letter with your phone. Minutes later it has a real name in Paperless, and your
 mission control can tell you what it says. Google Drive copies are optional.**
