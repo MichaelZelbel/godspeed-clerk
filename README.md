@@ -161,6 +161,19 @@ made. Connecting Drive again resumes copying with the existing plan.
 
 ## A new server
 
+### Move an existing Clerk and Paperless
+
+Install the released Clerk on the new Godspeed Mission Control server first. Leave its new Paperless empty and Clerk paused. From a computer with root SSH access to both servers, run the migration script from this repository:
+
+```bash
+node scripts/migrate-server.mjs --check --source old-server --target new-server
+node scripts/migrate-server.mjs --apply --source old-server --target new-server
+```
+
+The script uses Paperless's own export and import at the same Paperless version. It sends the complete export and Clerk's private state over SSH, checks every exported file against the source and Paperless manifest, imports into the empty new installation, makes a new Paperless token, and refreshes existing notebook and Documents links through Clerk's normal note run. It leaves both Clerk workers paused at the end. The old Paperless and its documents stay in place.
+
+The default old Paperless Compose file and export folder are `/opt/paperless-ngx/docker-compose.yml` and `/opt/paperless-ngx/export`. Use `--source-compose`, `--source-export`, `--source-state`, `--target-state` or `--staging` for another Linux layout. The two SSH aliases must log in as root without a prompt; the transfer uses SSH and never prints documents or credentials. Stop phone scans before `--apply` and keep them stopped until it reports completion: the old Paperless still accepts uploads during the move. If the move stops, the script restarts the old Clerk worker when it had paused it, and `--apply` can be repeated. Check the new server's Paperless and one phone scan before resuming its Clerk worker. Keep the old server until that check succeeds.
+
 With an existing Drive restore copy, when a server is gone, run the install line on the new one (it installs an empty Paperless) and
 connect the same Google Drive, with the same Google app as before. The Clerk finds its restore copy
 and says so. Rebuild before you name a documents folder or confirm a plan (the copy brings the plan
